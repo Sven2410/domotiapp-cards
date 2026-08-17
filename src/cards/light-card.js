@@ -1,25 +1,28 @@
 /**
  * Eén lamp, op de hoogte van een Mushroom-kaart ernaast.
  *
- * De rij is horizontaal: chip, naam met percentage, en de schuif ernaast. Dat is
+ * De rij is horizontaal: chip, naam met toestand, en de schuif ernaast. Dat is
  * niet alleen compacter dan de schuif eronder -- het maakt de kaart precies één
  * rasterrij hoog (56px), zodat een kolom met kaarten van verschillende makelij
  * toch één kolom blijft.
  *
- * Kan de lamp kleur of kleurtemperatuur, dan komen die strips eronder en is de
- * kaart twee rijen. Ze staan er ook als de lamp uit is, gedempt en niet te
- * bedienen: verschijnen en verdwijnen zou de kaart bij elke schakeling van
- * hoogte laten springen, en in een raster met vaste rijen betekent dat een gat.
+ * De kleurstrips staan er alleen zolang de lamp brandt. Kleur kiezen voor een
+ * lamp die uit is regelt niets. Dat betekent wel dat een kleurlamp twee
+ * rasterrijen opgeeft en de tweede leeg laat zolang hij uit staat: het raster
+ * kent vaste rijen, en van hoogte springen bij elke schakeling zou de kaarten
+ * eronder heen en weer duwen. Van die twee kwaden is een rustige lege regel de
+ * minste.
  *
  * De schuiven schrijven bij loslaten, niet tijdens het slepen: `light.turn_on`
  * op elke pixel overspoelt de bus en laat oudere Zigbee-lampen zichtbaar
  * stotteren. De vulling volgt de vinger meteen, dus het voelt wel live.
  */
 
-import { DacCard, registerCard, registerEditor, rowsFor, INCOMPLETE } from "../base.js";
+import { DacCard, registerCard, registerEditor, INCOMPLETE } from "../base.js";
 import { DacEditor, sel } from "../editor/base.js";
 import { resolve } from "../icons.js";
 import { bindActions, isDead, moreInfo, nameOf, stateOf } from "../ha.js";
+import { bindSlider, sliderCss, sliderHtml } from "../slider.js";
 
 const DIMMABLE = new Set(["brightness", "color_temp", "hs", "rgb", "rgbw", "rgbww", "xy", "white"]);
 const COLOURFUL = new Set(["hs", "rgb", "rgbw", "rgbww", "xy"]);
@@ -41,7 +44,6 @@ class LightCard extends DacCard {
     }
     :host([bare]) .card { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
 
-    /* ---- de rij: chip, naam, schuif. Samen 40px hoog. ---- */
     .lamp { display: flex; align-items: center; gap: 11px; min-height: 40px; }
 
     .chip { width: 40px; height: 40px; cursor: pointer; }
@@ -62,45 +64,13 @@ class LightCard extends DacCard {
     }
     .v { font-size: 11.5px; color: var(--dac-ink-2); font-variant-numeric: tabular-nums; line-height: 1.25; }
 
-    /* ---- schuiven ---- */
-    .slider { position: relative; flex: 1 1 90px; min-width: 70px; height: 32px; }
-    .slider .track {
-      position: absolute; inset: 0; border-radius: 10px;
-      background: var(--strip, rgba(255,255,255,.075)); overflow: hidden;
-    }
-    .slider .fill {
-      position: absolute; inset: 0 auto 0 0; width: var(--v, 0%);
-      border-radius: 10px;
-      background: linear-gradient(90deg,
-        color-mix(in srgb, var(--tone) 55%, transparent), var(--tone));
-      transition: width 90ms linear;
-    }
-    .slider[data-strip] .fill { display: none; }
-    .slider input {
-      position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
-      appearance: none; -webkit-appearance: none; background: transparent; cursor: ew-resize;
-      touch-action: pan-y;
-    }
-    .slider input::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 6px; height: 32px; border-radius: 3px; border: 0;
-      background: rgba(255,255,255,.9); box-shadow: 0 0 6px rgba(0,0,0,.5); cursor: ew-resize;
-    }
-    .slider input::-moz-range-thumb {
-      width: 6px; height: 32px; border-radius: 3px; border: 0;
-      background: rgba(255,255,255,.9); box-shadow: 0 0 6px rgba(0,0,0,.5); cursor: ew-resize;
-    }
-    .slider input:focus-visible { outline: 2px solid var(--dac-accent-hi); outline-offset: 2px; border-radius: 10px; }
+    ${sliderCss}
 
-    /* ---- kleur en wit ---- */
     .colour { display: flex; gap: 8px; }
     .colour[hidden] { display: none; }
-    .colour .slider { height: 26px; flex: 1 1 0; }
+    .colour .slider { height: 30px; flex: 1 1 0; }
     .colour .slider .track { border-radius: 8px; }
-    .colour .slider input::-webkit-slider-thumb { height: 26px; }
-    .colour .slider input::-moz-range-thumb { height: 26px; }
-    /* Uit is uit: de strips blijven staan zodat de hoogte niet springt, maar ze
-       stellen niets voor zolang er niets brandt. */
-    :host([lamp-off]) .colour { opacity: .32; pointer-events: none; }
+    .colour .slider .thumb { top: 4px; bottom: 4px; width: 6px; margin-left: -3px; }
 
     /* ---- aan/uit, voor lampen die alleen dat kunnen ---- */
     .toggle {
@@ -149,7 +119,6 @@ class LightCard extends DacCard {
   }
 
   wire() {
-    this.dragging_ = new Set();
     const entity = this.config.entity;
 
     this.teardown_.push(
@@ -159,44 +128,31 @@ class LightCard extends DacCard {
       })
     );
 
-    const onInput = (e) => {
-      const input = e.target;
-      if (input.type !== "range") return;
-      const kind = input.dataset.kind;
-      this.dragging_.add(kind);
-      const v = +input.value;
-      const s = input.closest(".slider");
-      if (kind === "brightness") {
-        s.style.setProperty("--v", `${v}%`);
-        this.text(".v", v === 0 ? "uit" : `${v}%`);
-      }
-    };
-
-    const onChange = (e) => {
-      const input = e.target;
-      if (input.type !== "range") return;
-      const kind = input.dataset.kind;
-      this.dragging_.delete(kind);
-      const v = +input.value;
-
-      if (kind === "brightness") {
-        if (v === 0) this.hass.callService("light", "turn_off", { entity_id: entity });
-        else this.hass.callService("light", "turn_on", { entity_id: entity, brightness_pct: v });
-      } else if (kind === "hue") {
-        const sat = stateOf(this.hass, entity)?.attributes?.hs_color?.[1] ?? 100;
-        this.hass.callService("light", "turn_on", { entity_id: entity, hs_color: [v, sat] });
-      } else if (kind === "kelvin") {
-        this.hass.callService("light", "turn_on", { entity_id: entity, color_temp_kelvin: v });
-      }
-    };
-
-    const card = this.$(".card");
-    card.addEventListener("input", onInput);
-    card.addEventListener("change", onChange);
-    card.addEventListener("click", (e) => {
+    this.$(".card").addEventListener("click", (e) => {
       if (!e.target.closest(".toggle")) return;
       this.hass.callService("light", "toggle", { entity_id: entity });
     });
+
+    // De schuiven worden pas gebouwd als we weten wat de lamp kan, dus ze
+    // krijgen hun gedrag in paint() aangehangen.
+    this.sliders_ = new Map();
+  }
+
+  /** Hang een schuif aan zodra hij bestaat, en niet twee keer. */
+  attach_(el, kind, opts) {
+    if (!el || this.sliders_.has(kind)) return;
+    const off = bindSlider(el, opts);
+    this.sliders_.set(kind, off);
+    this.teardown_.push(off);
+  }
+
+  setSlider_(el, v, min = 0, max = 100) {
+    if (!el) return;
+    const ratio = max > min ? ((v - min) / (max - min)) * 100 : 0;
+    el.style.setProperty("--v", `${ratio}%`);
+    el.setAttribute("aria-valuemin", String(min));
+    el.setAttribute("aria-valuemax", String(max));
+    el.setAttribute("aria-valuenow", String(v));
   }
 
   paint() {
@@ -208,7 +164,6 @@ class LightCard extends DacCard {
     const lampEl = this.$(".lamp");
     lampEl.dataset.on = String(on);
     lampEl.classList.toggle("unavailable", dead);
-    this.toggleAttribute("lamp-off", !on);
 
     const chip = this.$(".chip");
     const wanted = c.icon || "bulb";
@@ -230,79 +185,123 @@ class LightCard extends DacCard {
       ctl.dataset.kind = kind;
       ctl.innerHTML =
         kind === "range"
-          ? `<span class="slider" style="--v:0%">
-               <span class="track"><span class="fill"></span></span>
-               <input type="range" data-kind="brightness" min="0" max="100" step="1" value="0"
-                      aria-label="Helderheid" />
-             </span>`
+          ? sliderHtml("brightness")
           : kind === "toggle"
             ? `<button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Aan of uit"></button>`
             : "";
+      this.sliders_.delete("brightness");
     }
 
-    if (kind === "range" && !this.dragging_.has("brightness")) {
-      const v = on ? pct(st.attributes.brightness) : 0;
-      const input = ctl.querySelector("input");
-      if (this.shadowRoot.activeElement !== input) input.value = String(v);
-      ctl.querySelector(".slider").style.setProperty("--v", `${v}%`);
-      this.text(".v", on ? `${v}%` : "uit");
+    if (kind === "range") {
+      const el = ctl.querySelector(".slider");
+      this.attach_(el, "brightness", {
+        value: () => (st?.state === "on" ? pct(stateOf(this.hass, c.entity)?.attributes?.brightness) : 0),
+        onInput: (v) => {
+          this.setSlider_(el, v);
+          this.text(".v", v === 0 ? "Uit" : `${v}%`);
+        },
+        onCommit: (v) => {
+          if (v === 0) this.hass.callService("light", "turn_off", { entity_id: c.entity });
+          else this.hass.callService("light", "turn_on", { entity_id: c.entity, brightness_pct: v });
+        },
+        disabled: () => isDead(stateOf(this.hass, c.entity)),
+      });
+      if (!el.classList.contains("dragging")) {
+        const v = on ? pct(st.attributes.brightness) : 0;
+        this.setSlider_(el, v);
+        this.text(".v", on ? `${v}%` : "Uit");
+      }
     } else if (kind === "toggle") {
       ctl.querySelector(".toggle")?.setAttribute("aria-checked", String(on));
-      this.text(".v", on ? "aan" : "uit");
-    } else if (kind === "none") {
-      this.text(".v", "niet bereikbaar");
+      this.text(".v", on ? "Aan" : "Uit");
+    } else {
+      this.text(".v", "Niet bereikbaar");
     }
 
-    this.paintColour_(st);
+    this.paintColour_(st, on);
   }
 
-  paintColour_(st) {
+  /** Kleur en wit: alleen wat de lamp kan, en alleen terwijl hij brandt. */
+  paintColour_(st, on) {
     const box = this.$(".colour");
-    const want = this.config.show_colour !== false && (hasColour(st) || hasTemp(st));
-    box.hidden = !want;
-    if (!want) return;
+    const capable = this.config.show_colour !== false && (hasColour(st) || hasTemp(st));
+    box.hidden = !(capable && on);
+    if (!capable) return;
 
     const sig = `${hasColour(st) ? "c" : ""}${hasTemp(st) ? "t" : ""}`;
     if (box.dataset.sig !== sig) {
       box.dataset.sig = sig;
-      const min = st.attributes.min_color_temp_kelvin ?? 2000;
-      const max = st.attributes.max_color_temp_kelvin ?? 6500;
-      box.innerHTML = `
-        ${
-          hasColour(st)
-            ? `<span class="slider" data-strip title="Kleur" style="--strip:linear-gradient(90deg,
-                    hsl(0 90% 55%), hsl(60 90% 55%), hsl(120 90% 55%), hsl(180 90% 55%),
-                    hsl(240 90% 55%), hsl(300 90% 55%), hsl(360 90% 55%))">
-                 <span class="track"></span>
-                 <input type="range" data-kind="hue" min="0" max="360" step="1" value="0"
-                        aria-label="Kleur" />
-               </span>`
-            : ""
-        }
-        ${
-          hasTemp(st)
-            ? `<span class="slider" data-strip title="Kleurtemperatuur"
-                    style="--strip:linear-gradient(90deg,#ffb15e,#ffd6a8,#fff5e8,#eaf1ff,#cbdcff)">
-                 <span class="track"></span>
-                 <input type="range" data-kind="kelvin" min="${min}" max="${max}" step="50" value="${min}"
-                        aria-label="Kleurtemperatuur" />
-               </span>`
-            : ""
-        }`;
+      box.innerHTML =
+        (hasColour(st)
+          ? `<span data-kind="hue" style="display:contents">${sliderHtml("hue")}</span>`
+          : "") +
+        (hasTemp(st)
+          ? `<span data-kind="kelvin" style="display:contents">${sliderHtml("kelvin")}</span>`
+          : "");
+      const hueEl = box.querySelector(".slider.hue");
+      if (hueEl) {
+        hueEl.dataset.strip = "";
+        hueEl.style.setProperty(
+          "--strip",
+          "linear-gradient(90deg, hsl(0 90% 55%), hsl(60 90% 55%), hsl(120 90% 55%)," +
+            " hsl(180 90% 55%), hsl(240 90% 55%), hsl(300 90% 55%), hsl(360 90% 55%))"
+        );
+        hueEl.setAttribute("aria-label", "Kleur");
+      }
+      const kEl = box.querySelector(".slider.kelvin");
+      if (kEl) {
+        kEl.dataset.strip = "";
+        kEl.style.setProperty(
+          "--strip",
+          "linear-gradient(90deg,#ffb15e,#ffd6a8,#fff5e8,#eaf1ff,#cbdcff)"
+        );
+        kEl.setAttribute("aria-label", "Kleurtemperatuur");
+      }
+      this.sliders_.delete("hue");
+      this.sliders_.delete("kelvin");
     }
 
-    const hue = box.querySelector('[data-kind="hue"]');
-    if (hue && !this.dragging_.has("hue") && this.shadowRoot.activeElement !== hue) {
-      hue.value = String(Math.round(st.attributes.hs_color?.[0] ?? 0));
+    if (!on) return;
+    const id = this.config.entity;
+
+    const hueEl = box.querySelector(".slider.hue");
+    if (hueEl) {
+      this.attach_(hueEl, "hue", {
+        min: 0,
+        max: 360,
+        value: () => stateOf(this.hass, id)?.attributes?.hs_color?.[0] ?? 0,
+        onInput: (v) => this.setSlider_(hueEl, v, 0, 360),
+        onCommit: (v) => {
+          const sat = stateOf(this.hass, id)?.attributes?.hs_color?.[1] ?? 100;
+          this.hass.callService("light", "turn_on", { entity_id: id, hs_color: [v, sat] });
+        },
+      });
+      if (!hueEl.classList.contains("dragging")) {
+        this.setSlider_(hueEl, Math.round(st.attributes.hs_color?.[0] ?? 0), 0, 360);
+      }
     }
-    const kelvin = box.querySelector('[data-kind="kelvin"]');
-    if (kelvin && !this.dragging_.has("kelvin") && this.shadowRoot.activeElement !== kelvin) {
-      const k = st.attributes.color_temp_kelvin;
-      if (k != null) kelvin.value = String(k);
+
+    const kEl = box.querySelector(".slider.kelvin");
+    if (kEl) {
+      const min = st.attributes.min_color_temp_kelvin ?? 2000;
+      const max = st.attributes.max_color_temp_kelvin ?? 6500;
+      this.attach_(kEl, "kelvin", {
+        min,
+        max,
+        step: 50,
+        value: () => stateOf(this.hass, id)?.attributes?.color_temp_kelvin ?? min,
+        onInput: (v) => this.setSlider_(kEl, v, min, max),
+        onCommit: (v) =>
+          this.hass.callService("light", "turn_on", { entity_id: id, color_temp_kelvin: v }),
+      });
+      if (!kEl.classList.contains("dragging")) {
+        const k = st.attributes.color_temp_kelvin;
+        if (k != null) this.setSlider_(kEl, k, min, max);
+      }
     }
   }
 
-  /** Hoeveel rasterrijen deze lamp inneemt: één, of twee met kleurstrips. */
+  /** Eén rij, of twee zodra de lamp kleur of kleurtemperatuur kan. */
   rows_() {
     const st = stateOf(this.hass, this.config?.entity);
     const colour = this.config?.show_colour !== false && st && (hasColour(st) || hasTemp(st));
@@ -358,7 +357,7 @@ class LightEditor extends DacEditor {
     if (s.name === "entity")
       return "Eén lamp per kaart. Dimbaar krijgt een schuif, alleen schakelbaar een tuimelaar.";
     if (s.name === "show_colour")
-      return "Kleur en kleurtemperatuur, als de lamp ze kan. De kaart wordt dan twee rijen hoog.";
+      return "Kleur en kleurtemperatuur verschijnen zodra de lamp aan is. De kaart is dan twee rijen hoog.";
     return undefined;
   }
 }

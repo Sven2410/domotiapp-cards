@@ -1,17 +1,25 @@
 /**
- * The workhorse: one control, three shapes.
+ * Het werkpaard: één control, drie vormen.
  *
- * Most of a dashboard is this card. It replaces the pile of `tile`,
- * `mushroom-entity-card` and bubble-card buttons that a grown dashboard ends up
- * with -- four families doing one job in four visual languages.
+ * Het meeste van een dashboard is deze kaart. Hij vervangt de stapel `tile`,
+ * `mushroom-entity-card` en bubble-knoppen waar een gegroeid dashboard mee
+ * eindigt -- vier families die één klus doen in vier vormtalen.
  *
- * `state_color` is on by default and it is the only thing that decides whether
- * the chip lights up. A button that looks identical whether the lamp is on or
- * off is the most common way a smart home dashboard fails at a glance, and the
- * fix costs nothing.
+ * Het icoon en de kaart zijn twee knoppen. Op het icoon tikken schakelt de
+ * entiteit, op de kaart tikken doet wat jij instelt -- meestal navigeren naar
+ * een pop-up. Dat is hoe een ruimtetegel werkt: het lampje aan zonder de kamer
+ * te openen, of de kamer openen zonder het lampje aan te doen.
  *
- * A card with no entity is legal and useful: that is a navigation button, and
- * it is how the room tiles and the floor buttons on a home view are built.
+ * Alleen het icoon licht op als er iets aanstaat. Het hele vlak laten oplichten
+ * was te veel: een kolom van acht aanstaande knoppen werd een muur in plaats van
+ * een rij.
+ *
+ * De kleur volgt wat er hangt. Een lamp draagt zijn eigen kleur, want die weet
+ * je pas als hij brandt; al het andere krijgt het accent. Een keuze "kleur volgt
+ * toestand" stond hier ook, maar dat is geen keuze -- een knop die er hetzelfde
+ * uitziet of het apparaat nu aan of uit staat, is een kapotte knop.
+ *
+ * Een kaart zonder entiteit mag en is nuttig: dat is een navigatieknop.
  */
 
 import { DacCard, registerCard, registerEditor, toneValue, TONES } from "../base.js";
@@ -50,14 +58,15 @@ class ButtonCard extends DacCard {
     .btn:hover { border-color: var(--dac-border-hi); background: var(--dac-surface-hi); }
     .btn:active { transform: scale(.985); }
 
-    /* On is a state, so it changes the surface, not only the icon. Kept faint:
-       a row of eight lit buttons should still read as a row, not a wall. */
-    :host([on]) .btn {
-      background: color-mix(in srgb, var(--tone) 9%, var(--dac-surface));
-      border-color: color-mix(in srgb, var(--tone) 34%, var(--dac-border));
+    /* Alleen het icoon draagt de toestand. Zie de kop. */
+    .chip {
+      cursor: pointer;
+      transition: color 220ms ease, background 220ms ease,
+                  border-color 220ms ease, box-shadow 220ms ease;
     }
-
-    .chip { transition: color 220ms ease, background 220ms ease, border-color 220ms ease; }
+    :host([on]) .chip {
+      box-shadow: 0 0 14px -2px color-mix(in srgb, var(--tone) 55%, transparent);
+    }
     .chip .icon, .chip ha-icon { display: block; --mdc-icon-size: 20px; }
 
     .txt { min-width: 0; flex: 1 1 auto; }
@@ -94,15 +103,15 @@ class ButtonCard extends DacCard {
     :host([layout="compact"]) .chip .icon, :host([layout="compact"]) .chip ha-icon { width: 17px; height: 17px; }
     :host([layout="compact"]) .nm { font-size: 13px; }
 
-    /* A faint wash of the identity colour, so a tile is recognisable from
-       across a room before any text is legible. */
+    /* Een vleug identiteitskleur op een tegel, zodat je hem van een afstand
+       herkent voordat de tekst leesbaar is. Alleen op de tegelvorm: in een rij
+       zou het net het oplichten worden dat er juist uit moest. */
     .wash {
       position: absolute; top: -70px; right: -60px; width: 190px; height: 190px;
       border-radius: 50%; pointer-events: none; opacity: 0;
       background: radial-gradient(circle, var(--tone) 0%, transparent 70%);
       transition: opacity 260ms ease;
     }
-    :host([on]) .wash { opacity: .16; }
     :host([layout="tile"]) .wash { opacity: .10; }
     :host([layout="tile"][on]) .wash { opacity: .2; }
 
@@ -111,7 +120,6 @@ class ButtonCard extends DacCard {
   validate(config) {
     return {
       layout: "row",
-      state_color: true,
       show_state: true,
       show_name: true,
       show_icon: true,
@@ -123,14 +131,21 @@ class ButtonCard extends DacCard {
     return [this.config.entity].filter(Boolean);
   }
 
-  /** The colour this button wears right now. */
+  /**
+   * De kleur die deze knop nu draagt.
+   *
+   * Een lamp draagt de kleur die hij maakt -- daar hangt hij tenslotte voor. Een
+   * lichtgroep zonder eigen kleur, en alles wat geen lamp is, krijgt het accent.
+   */
   tone_() {
     const c = this.config;
     if (c.tone) return toneValue(c.tone);
-    // No tone chosen: lamps go warm when lit, everything else takes the accent.
-    // Never green -- that is reserved for status.
-    if (domainOf(c.entity) === "light") return TONES.lit;
-    return TONES.accent;
+    if (domainOf(c.entity) !== "light") return TONES.accent;
+
+    const st = stateOf(this.hass, c.entity);
+    const rgb = st?.state === "on" ? st.attributes?.rgb_color : null;
+    if (rgb) return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    return TONES.lit;
   }
 
   template() {
@@ -138,40 +153,56 @@ class ButtonCard extends DacCard {
     this.setAttribute("layout", ["row", "tile", "compact"].includes(c.layout) ? c.layout : "row");
 
     return `
-      <button class="btn" type="button" style="--tone:${this.tone_()}">
+      <div class="btn" role="button" tabindex="0" style="--tone:${this.tone_()}">
         <span class="wash"></span>
-        ${c.show_icon === false ? "" : `<span class="chip"></span>`}
+        ${c.show_icon === false ? "" : `<span class="chip" role="button" tabindex="0"></span>`}
         <span class="txt">
           ${c.show_name === false ? "" : `<span class="nm"></span>`}
           ${c.show_state === false ? "" : `<span class="st"></span>`}
         </span>
-      </button>`;
+      </div>`;
   }
 
   wire() {
     const c = this.config;
-    const btn = this.$(".btn");
-
-    const fire = (which, fallback) =>
-      runAction(this, this.hass, c, c[which] ?? fallback);
+    const fire = (which, fallback) => runAction(this, this.hass, c, c[which] ?? fallback);
 
     this.teardown_.push(
-      bindActions(btn, {
+      bindActions(this.$(".btn"), {
         onTap: () => fire("tap_action", defaultTapAction(c.entity)),
         onHold: () => fire("hold_action", { action: c.entity ? "more-info" : "none" }),
-        onDouble: c.double_tap_action ? () => fire("double_tap_action", { action: "none" }) : undefined,
+        onDouble: c.double_tap_action
+          ? () => fire("double_tap_action", { action: "none" })
+          : undefined,
       })
     );
+
+    // Het icoon is een eigen knop. Standaard schakelt hij de entiteit, zodat een
+    // ruimtetegel met een lichtgroep meteen doet wat je verwacht.
+    const chip = this.$(".chip");
+    if (!chip) return;
+    this.teardown_.push(
+      bindActions(chip, {
+        onTap: (e) => fire("icon_tap_action", defaultTapAction(c.entity)),
+        onHold: () => fire("icon_hold_action", { action: c.entity ? "more-info" : "none" }),
+      })
+    );
+    // Anders telt een tik op het icoon ook als een tik op de kaart.
+    chip.addEventListener("click", (e) => e.stopPropagation());
+    chip.addEventListener("pointerdown", (e) => e.stopPropagation());
   }
 
   paint() {
     const c = this.config;
     const st = stateOf(this.hass, c.entity);
-    const on = c.state_color !== false && isOn(st);
+    const on = isOn(st);
     const dead = Boolean(c.entity) && isDead(st);
 
     this.toggleAttribute("on", on);
     this.$(".btn").classList.toggle("unavailable", dead);
+
+    // De kleur van de kaart volgt de lamp, dus die moet elke keer opnieuw.
+    this.$(".btn").style.setProperty("--tone", this.tone_());
 
     const chip = this.$(".chip");
     if (chip) {
@@ -180,9 +211,13 @@ class ButtonCard extends DacCard {
         chip.dataset.icon = wanted;
         chip.innerHTML = resolve(wanted);
       }
-      // Off is a real state and it should look like one: the chip goes quiet
-      // rather than keeping its colour and only changing the background.
+      // Uit is een echte toestand en hoort er ook zo uit te zien: de chip wordt
+      // stil in plaats van zijn kleur te houden.
       chip.style.setProperty("--tone", on ? this.tone_() : "var(--dac-ink-3)");
+      chip.setAttribute(
+        "aria-label",
+        c.entity ? `${nameOf(this.hass, c.entity, c.name)} schakelen` : "Icoon"
+      );
     }
 
     this.text(".nm", nameOf(this.hass, c.entity, c.name));
@@ -240,13 +275,7 @@ class ButtonEditor extends DacEditor {
   // Zonder deze stonden alle vinkjes uit terwijl de instelling aanstond:
   // aanzetten deed dan niets en alleen uitzetten had zichtbaar effect.
   defaults() {
-    return {
-      layout: "row",
-      state_color: true,
-      show_state: true,
-      show_name: true,
-      show_icon: true,
-    };
+    return { layout: "row", show_state: true, show_name: true, show_icon: true };
   }
 
   pickers() {
@@ -273,7 +302,8 @@ class ButtonEditor extends DacEditor {
       { name: "show_icon", selector: sel.bool() },
       { name: "show_name", selector: sel.bool() },
       { name: "show_state", selector: sel.bool() },
-      { name: "state_color", selector: sel.bool() },
+      { name: "icon_tap_action", selector: sel.action() },
+      { name: "icon_hold_action", selector: sel.action() },
       { name: "tap_action", selector: sel.action() },
       { name: "hold_action", selector: sel.action() },
       { name: "double_tap_action", selector: sel.action() },
@@ -289,7 +319,11 @@ class ButtonEditor extends DacEditor {
         show_icon: "Icoon tonen",
         show_name: "Naam tonen",
         show_state: "Toestand tonen",
-        state_color: "Kleur volgt de toestand",
+        icon_tap_action: "Tikken op het icoon",
+        icon_hold_action: "Vasthouden op het icoon",
+        tap_action: "Tikken op de kaart",
+        hold_action: "Vasthouden op de kaart",
+        double_tap_action: "Dubbeltikken op de kaart",
       }[s.name] ?? super.label(s)
     );
   }
@@ -297,8 +331,10 @@ class ButtonEditor extends DacEditor {
   helper(s) {
     if (s.name === "entity")
       return "Mag leeg blijven: zonder entiteit wordt dit een navigatieknop.";
+    if (s.name === "icon_tap_action")
+      return "Leeg laten schakelt de entiteit. Handig: het icoon schakelt de lichtgroep, de kaart navigeert naar de ruimte.";
     if (s.name === "tap_action")
-      return "Leeg laten schakelt de entiteit, of opent meer informatie als schakelen niet kan.";
+      return "Wat er gebeurt als je naast het icoon tikt, bijvoorbeeld navigeren naar een pop-up.";
     return undefined;
   }
 }

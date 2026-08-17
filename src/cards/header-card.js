@@ -1,9 +1,13 @@
 /**
  * De bovenrand van een dashboard: wie er kijkt, hoe laat het is, wat het buiten doet.
  *
- * Eén smalle strip over de volle breedte, niet een blok. Dat is wat een header
- * hoort te zijn: hij oriënteert je en gaat dan opzij voor de bediening. Alles
- * staat op één regel en schuift op tot het niet meer past.
+ * Twee regels over de volle breedte. Eerst stond alles op één regel, maar dan
+ * moet de zonsondergang wijken zodra er een lange naam in de begroeting staat --
+ * en een waarde die half wegvalt is erger dan een kaart die een rij hoger is.
+ * Onder elkaar past alles, en het scheelt bovendien flink in de breedte:
+ *
+ *   regel 1   begroeting en datum          |  weer en temperatuur
+ *   regel 2   vochtigheid, wind, UV, ...   |  klok
  *
  * Onder een ingestelde breedte verdwijnt hij helemaal. Op een telefoon is de
  * bovenrand het schaarste stuk scherm dat er is, en HA's eigen kop toont daar de
@@ -67,9 +71,10 @@ class HeaderCard extends DacCard {
     :host([narrow]) { display: none; }
 
     .strip {
-      height: 100%; min-height: 56px;
-      display: flex; align-items: center; flex-wrap: nowrap; gap: 18px;
-      padding: 8px 16px;
+      height: 100%; min-height: 96px;
+      display: grid; grid-template-columns: 1fr auto; align-items: center;
+      gap: 6px 18px;
+      padding: 10px 16px;
       background: var(--dac-surface);
       border: 1px solid var(--dac-border);
       border-radius: var(--dac-radius);
@@ -87,32 +92,33 @@ class HeaderCard extends DacCard {
     }
     :host([no-rule]) .strip::after { display: none; }
 
-    .who { flex: 0 0 auto; min-width: 0; order: 1; }
-    .hello { font-size: 14.5px; font-weight: 400; letter-spacing: -.01em; line-height: 1.2; white-space: nowrap; }
+    .who { min-width: 0; grid-column: 1; grid-row: 1; }
+    .hello {
+      font-size: 15.5px; font-weight: 400; letter-spacing: -.01em; line-height: 1.2;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .hello b { font-weight: 600; }
-    .date { margin-top: 1px; font-size: 11px; color: var(--dac-ink-3); white-space: nowrap; }
+    .date { margin-top: 2px; font-size: 11.5px; color: var(--dac-ink-3); white-space: nowrap; }
 
     /* De weerdetails krijgen de ruimte die overblijft en schuiven horizontaal
        weg als die op is, in plaats van de strip twee regels hoog te maken. */
-    /* Eén regel, en wat er niet op past wordt hele chips weggelaten.
-       Wrappen leek netter tot het de strip twee regels hoog maakte terwijl hij
-       er één had opgegeven bij het raster: dan loopt de kaart onder de volgende
-       kaart door. Een halve waarde tonen is ook geen optie -- "20:5" leest als
-       een storing. Dus: hele chips, of niets. */
+    /* De weerdetails krijgen de hele tweede regel voor zich, dus ze passen.
+       Mocht het toch krap worden, dan valt er een hele chip weg en nooit een
+       halve waarde -- "20:5" leest als een storing, niet als een hint. */
     .chips {
-      flex: 1 1 0; min-width: 0; order: 3;
-      display: flex; align-items: center; flex-wrap: nowrap; gap: 16px;
+      grid-column: 1; grid-row: 2; min-width: 0;
+      display: flex; align-items: center; flex-wrap: nowrap; gap: 18px;
       overflow: hidden;
     }
     .chips:empty { display: none; }
     .chip2 {
       display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
-      font-size: 12px; color: var(--dac-ink-2); white-space: nowrap;
+      font-size: 12.5px; color: var(--dac-ink-2); white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
-    .chip2 .icon, .chip2 ha-icon { width: 14px; height: 14px; --mdc-icon-size: 14px; color: var(--tone); }
+    .chip2 .icon, .chip2 ha-icon { width: 15px; height: 15px; --mdc-icon-size: 15px; color: var(--tone); }
 
-    .now { flex: 0 0 auto; order: 2; display: flex; align-items: center; gap: 9px; margin-left: auto; }
+    .now { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 9px; justify-self: end; }
     .now .ic { display: flex; color: var(--wtone); }
     .now .ic .icon, .now .ic ha-icon { width: 22px; height: 22px; --mdc-icon-size: 22px; }
     .now .temp { font-size: 21px; font-weight: 300; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
@@ -128,16 +134,14 @@ class HeaderCard extends DacCard {
     }
 
     .clock {
-      flex: 0 0 auto; order: 4; margin-left: auto;
-      padding-left: 16px; border-left: 1px solid var(--dac-border);
-      font-size: 18px; font-weight: 400; letter-spacing: -.01em;
+      grid-column: 2; grid-row: 2; justify-self: end;
+      font-size: 19px; font-weight: 400; letter-spacing: -.01em;
       font-variant-numeric: tabular-nums;
     }
 
-    @media (max-width: 900px) {
-      .strip {
-      min-height: 56px; gap: 12px; }
+    @media (max-width: 620px) {
       .now .cond { display: none; }
+      .chips { gap: 12px; }
     }
   `;
 
@@ -346,11 +350,11 @@ class HeaderCard extends DacCard {
   }
 
   getCardSize() {
-    return 1;
+    return 2;
   }
 
   getGridOptions() {
-    return { columns: "full", rows: 1, min_rows: 1, max_rows: 1 };
+    return { columns: "full", rows: 2, min_rows: 2, max_rows: 2 };
   }
 
   static getConfigElement() {

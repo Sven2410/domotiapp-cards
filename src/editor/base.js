@@ -254,7 +254,6 @@ export const LABELS = {
   show_state: "Toestand tonen",
   show_name: "Naam tonen",
   show_icon: "Icoon tonen",
-  state_color: "Kleur volgt toestand",
   fill: "Vullen",
   collapsible: "Inklapbaar",
   title: "Titel",

@@ -22,6 +22,7 @@ import { DacCard, registerCard, registerEditor, rowsFor, toneValue, INCOMPLETE }
 import { DacEditor, sel } from "../editor/base.js";
 import { icons, resolve } from "../icons.js";
 import { attrsOf, bindActions, moreInfo, nameOf, stateOf } from "../ha.js";
+import { bindSlider, sliderCss, sliderHtml } from "../slider.js";
 
 const F = { OPEN: 1, CLOSE: 2, SET_POSITION: 4, STOP: 8 };
 const can = (st, bit) => Boolean((st?.attributes?.supported_features ?? 0) & bit);
@@ -97,22 +98,9 @@ class CoverCard extends DacCard {
     .keys button:disabled { opacity: .3; cursor: default; }
 
     /* ---- positie, alleen bij motoren die terugmelden ---- */
-    .pos { grid-column: 1 / -1; margin: 2px 0 4px; }
+    .pos { grid-column: 1 / -1; margin: 2px 0 4px; display: flex; }
     .pos[hidden] { display: none; }
-    .slider { position: relative; height: 26px; }
-    .slider .track { position: absolute; inset: 9px 0; border-radius: var(--dac-radius-pill);
-                     background: rgba(255,255,255,.075); overflow: hidden; }
-    .slider .fill { position: absolute; inset: 0 auto 0 0; width: var(--v,0%);
-                    border-radius: var(--dac-radius-pill);
-                    background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 45%, transparent), var(--tone));
-                    transition: width 90ms linear; }
-    .slider input { position: absolute; inset: -6px 0; width: 100%; height: 38px; margin: 0;
-                    appearance: none; -webkit-appearance: none; background: transparent;
-                    cursor: ew-resize; touch-action: pan-y; }
-    .slider input::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 26px;
-      border-radius: 6px; border: 0; background: var(--dac-ink); box-shadow: 0 2px 8px rgba(0,0,0,.6); }
-    .slider input::-moz-range-thumb { width: 16px; height: 26px; border-radius: 6px; border: 0;
-      background: var(--dac-ink); box-shadow: 0 2px 8px rgba(0,0,0,.6); }
+    ${sliderCss}
 
     .cv.unavailable { opacity: .42; pointer-events: none; }
 
@@ -186,22 +174,7 @@ class CoverCard extends DacCard {
         bindActions(cvEl.querySelector(".chip"), { onTap: () => moreInfo(this, entity) })
       );
 
-      const pos = cvEl.querySelector(".pos");
-      pos.addEventListener("input", (e) => {
-        if (e.target.type !== "range") return;
-        this.dragging_.add(i);
-        const v = +e.target.value;
-        pos.querySelector(".slider").style.setProperty("--v", `${v}%`);
-        cvEl.querySelector(".st").textContent = `${v}% open`;
-      });
-      pos.addEventListener("change", (e) => {
-        if (e.target.type !== "range") return;
-        this.dragging_.delete(i);
-        this.hass.callService("cover", "set_cover_position", {
-          entity_id: entity,
-          position: +e.target.value,
-        });
-      });
+      // De positieschuif krijgt zijn gedrag pas als hij bestaat -- zie paint().
     });
   }
 
@@ -278,17 +251,31 @@ class CoverCard extends DacCard {
       if (wantPos) {
         if (!pos.dataset.built) {
           pos.dataset.built = "1";
-          pos.innerHTML = `
-            <div class="slider" style="--v:0%">
-              <span class="track"><span class="fill"></span></span>
-              <input type="range" min="0" max="100" step="1" value="0" aria-label="Positie" />
-            </div>`;
+          pos.innerHTML = sliderHtml("position");
+          const el = pos.querySelector(".slider");
+          el.setAttribute("aria-label", "Positie");
+          const set = (v) => {
+            el.style.setProperty("--v", `${v}%`);
+            el.setAttribute("aria-valuenow", String(v));
+            cvEl.querySelector(".st").textContent = `${v}% open`;
+          };
+          this.teardown_.push(
+            bindSlider(el, {
+              value: () => attrsOf(this.hass, cfg.entity).current_position ?? 0,
+              onInput: set,
+              onCommit: (v) =>
+                this.hass.callService("cover", "set_cover_position", {
+                  entity_id: cfg.entity,
+                  position: v,
+                }),
+            })
+          );
         }
-        if (!this.dragging_.has(i)) {
+        const el = pos.querySelector(".slider");
+        if (!el.classList.contains("dragging")) {
           const v = attrs.current_position ?? 0;
-          const input = pos.querySelector("input");
-          if (this.shadowRoot.activeElement !== input) input.value = String(v);
-          pos.querySelector(".slider").style.setProperty("--v", `${v}%`);
+          el.style.setProperty("--v", `${v}%`);
+          el.setAttribute("aria-valuenow", String(v));
         }
       }
     });
