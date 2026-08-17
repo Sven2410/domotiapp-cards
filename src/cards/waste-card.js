@@ -75,7 +75,10 @@ class WasteCard extends DacCard {
       font-size: 18px; font-weight: 500; letter-spacing: -.02em; line-height: 1.15;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .hero .when { margin-left: auto; text-align: right; flex: 0 0 auto; }
+    .hero .when {
+      margin-left: auto; text-align: right; flex: 0 0 auto;
+      display: flex; align-items: baseline; gap: 5px;
+    }
     .hero .when .n { font-size: 18px; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 
     /* Today and tomorrow are the only two states that need to shout. */
@@ -303,13 +306,7 @@ class WasteEditor extends DacEditor {
         .map((s) => (typeof s === "string" ? s : s.entity))
         .filter(Boolean)
         .map((id) => ({ name: `kleur:${id}`, selector: sel.select(options) })),
-      section("Weergave", "mdi:eye", [
-        row(
-          { name: "show_hero", selector: sel.bool() },
-          { name: "show_list", selector: sel.bool() }
-        ),
-        { name: "bare", selector: sel.bool() },
-      ]),
+
     ];
   }
 

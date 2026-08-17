@@ -1,11 +1,25 @@
 /**
  * The base every DomotiApp card is built on -- no framework, no build step.
  *
- * Rendering is split in two on purpose. `template()` builds the DOM once;
- * `paint()` writes values into it on every relevant state change. Rebuilding
- * innerHTML instead would be less code and would also throw away focus, a
- * half-finished drag on a slider, and the browser's own scroll position in a
- * row of buttons -- every time any entity in the house changed.
+ * Er zitten drie taken in, en ze staan bewust uit elkaar.
+ *
+ *   template()  bouwt de DOM, eenmalig per config.
+ *   wire()      hangt listeners op, bij ELKE keer dat de kaart in de pagina komt.
+ *   paint()     schrijft waarden in de bestaande DOM, bij elke relevante wijziging.
+ *
+ * Dat `wire()` bij elke aankoppeling opnieuw draait is geen netheid maar een
+ * noodzaak. Home Assistant haalt kaarten los en hangt ze terug: een sections-view
+ * verplaatst ze tijdens het opbouwen, en views worden in de cache gezet en weer
+ * teruggezet. Elke losmaking ruimt de listeners op. Werd er daarna niet opnieuw
+ * gekoppeld, dan staat er een kaart die er perfect uitziet en nergens meer op
+ * reageert -- terwijl hij in de kaarteditor wel werkt, want daar wordt niets
+ * verplaatst. Precies die val staat ook in domotiapp-coach/frontend/src/base.js
+ * beschreven; deze klasse trapte er alsnog in.
+ *
+ * `paint()` schrijft in de bestaande DOM in plaats van innerHTML opnieuw te
+ * bouwen. Dat laatste zou minder code zijn en zou ook focus, een half afgemaakte
+ * sleepbeweging en de scrollpositie weggooien -- elke keer dat er ergens in huis
+ * iets veranderde.
  */
 
 import { baseCss, sheet, tokens } from "./theme.js";
@@ -111,6 +125,7 @@ export class DacCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this.shadowRoot.adoptedStyleSheets = new.target.styleSheets_;
     this.built_ = false;
+    this.wired_ = false;
     this.teardown_ = [];
   }
 
@@ -126,6 +141,7 @@ export class DacCard extends HTMLElement {
       this.destroy_();
       this.shadowRoot.replaceChildren();
       this.built_ = false;
+      this.wired_ = false;
     }
     if (this.isConnected) this.build_();
   }
@@ -149,11 +165,22 @@ export class DacCard extends HTMLElement {
   }
 
   connectedCallback() {
-    if (this.config && !this.built_) this.build_();
+    if (!this.config) return;
+    if (!this.built_) {
+      this.build_();
+      return;
+    }
+    // De DOM staat er nog, de listeners niet meer: opnieuw koppelen.
+    if (!this.wired_) {
+      this.wire();
+      this.wired_ = true;
+      if (this.hass_) this.paint();
+    }
   }
 
   disconnectedCallback() {
     this.destroy_();
+    this.wired_ = false;
   }
 
   /* ------------------------------------------------------- subclass API */
@@ -194,6 +221,7 @@ export class DacCard extends HTMLElement {
     this.built_ = true;
     if (missing) return;
     this.wire();
+    this.wired_ = true;
     if (this.hass_) this.paint();
   }
 

@@ -73,9 +73,11 @@ class DacTonePicker extends HTMLElement {
     this.shadowRoot.adoptedStyleSheets = sheets;
     this.value_ = "";
     this.label = "Kleur";
-    // Statuskleuren betekenen iets. Op een kaart waar kleur puur identiteit is
-    // -- een header, een sectiekop, een rolluik -- horen ze niet in de keuze.
-    this.statuses = true;
+    // Statuskleuren staan er niet in. Kleur is op deze kaarten identiteit -- wat
+    // iets ís -- en geen oordeel. Goed, let op en kritiek blijven van de kaart
+    // zelf: thuis of weg, brandt of niet. Ze uitdelen als decoratie is hoe rood
+    // ophoudt iets te betekenen.
+    this.statuses = false;
   }
 
   set value(v) {

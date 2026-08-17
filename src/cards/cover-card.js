@@ -329,7 +329,7 @@ class CoverEditor extends DacEditor {
     return [
       { key: "icon_open", kind: "icon", label: "Icoon als het open staat", fallback: "shutterOpen" },
       { key: "icon_closed", kind: "icon", label: "Icoon als het dicht is", fallback: "shutter" },
-      { key: "tone", kind: "tone", label: "Kleur", statuses: false },
+      { key: "tone", kind: "tone", label: "Kleur" },
     ];
   }
 

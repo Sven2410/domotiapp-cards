@@ -61,18 +61,14 @@ const bearing = (deg) => {
 
 class HeaderCard extends DacCard {
   static css = /* css */ `
-    :host { display: block; }
+    :host { display: block; height: 100%; }
     /* Onder het afkappunt bestaat de kaart niet -- ook geen lege ruimte, want
        in een sections-view laat een verborgen kaart anders zijn gat staan. */
     :host([narrow]) { display: none; }
 
     .strip {
-      min-height: 56px;
-      /* Wrappen in plaats van de details wegduwen. In een smalle kolom zou een
-         niet-wrappende strip de weerchips tot nul breedte knijpen en het masker
-         zou ze dan onzichtbaar maken -- weg zonder dat iets kapot lijkt, wat de
-         vervelendste soort verdwijning is. */
-      display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
+      height: 100%; min-height: 56px;
+      display: flex; align-items: center; flex-wrap: nowrap; gap: 18px;
       padding: 8px 16px;
       background: var(--dac-surface);
       border: 1px solid var(--dac-border);
@@ -98,12 +94,15 @@ class HeaderCard extends DacCard {
 
     /* De weerdetails krijgen de ruimte die overblijft en schuiven horizontaal
        weg als die op is, in plaats van de strip twee regels hoog te maken. */
-    /* Wrappen, niet maskeren. Een masker over een rij die net niet past snijdt
-       de laatste waarde half af -- "20:5" leest als een storing, niet als een
-       hint dat er meer staat. */
+    /* Eén regel, en wat er niet op past wordt hele chips weggelaten.
+       Wrappen leek netter tot het de strip twee regels hoog maakte terwijl hij
+       er één had opgegeven bij het raster: dan loopt de kaart onder de volgende
+       kaart door. Een halve waarde tonen is ook geen optie -- "20:5" leest als
+       een storing. Dus: hele chips, of niets. */
     .chips {
-      flex: 1 1 260px; min-width: 0; order: 3;
-      display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px;
+      flex: 1 1 0; min-width: 0; order: 3;
+      display: flex; align-items: center; flex-wrap: nowrap; gap: 16px;
+      overflow: hidden;
     }
     .chips:empty { display: none; }
     .chip2 {
@@ -376,7 +375,7 @@ class HeaderEditor extends DacEditor {
   }
 
   pickers() {
-    return [{ key: "tone", kind: "tone", label: "Kleur weericoon", statuses: false }];
+    return [{ key: "tone", kind: "tone", label: "Kleur weericoon" }];
   }
 
   schema() {
@@ -390,18 +389,7 @@ class HeaderEditor extends DacEditor {
         { name: "precipitation_entity", selector: sel.entity("sensor") }
       ),
       { name: "name", selector: sel.text() },
-      section("Weergave", "mdi:eye", [
-        { name: "hide_below", selector: sel.number(0, 1400, 8) },
-        row(
-          { name: "show_clock", selector: sel.bool() },
-          { name: "show_weather", selector: sel.bool() }
-        ),
-        row(
-          { name: "show_chips", selector: sel.bool() },
-          { name: "show_rule", selector: sel.bool() }
-        ),
-        { name: "bare", selector: sel.bool() },
-      ]),
+      { name: "hide_below", selector: sel.number(0, 1400, 8) },
     ];
   }
 

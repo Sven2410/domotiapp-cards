@@ -15,7 +15,7 @@
  */
 
 import { DacCard, registerCard, registerEditor, toneValue, TONES } from "../base.js";
-import { DacEditor, sel, row, section, LABELS } from "../editor/base.js";
+import { DacEditor, sel } from "../editor/base.js";
 import { resolve, defaultIcon } from "../icons.js";
 import {
   attrsOf,
@@ -106,15 +106,6 @@ class ButtonCard extends DacCard {
     :host([layout="tile"]) .wash { opacity: .10; }
     :host([layout="tile"][on]) .wash { opacity: .2; }
 
-    .badge {
-      position: absolute; top: 8px; right: 8px;
-      font-size: 10px; font-weight: 600; letter-spacing: .04em;
-      padding: 2px 7px; border-radius: var(--dac-radius-pill);
-      color: var(--dac-ink);
-      background: color-mix(in srgb, var(--tone) 26%, transparent);
-      border: 1px solid color-mix(in srgb, var(--tone) 50%, transparent);
-    }
-    .badge:empty { display: none; }
   `;
 
   validate(config) {
@@ -129,7 +120,7 @@ class ButtonCard extends DacCard {
   }
 
   watched() {
-    return [this.config.entity, this.config.secondary_entity].filter(Boolean);
+    return [this.config.entity].filter(Boolean);
   }
 
   /** The colour this button wears right now. */
@@ -154,7 +145,6 @@ class ButtonCard extends DacCard {
           ${c.show_name === false ? "" : `<span class="nm"></span>`}
           ${c.show_state === false ? "" : `<span class="st"></span>`}
         </span>
-        <span class="badge"></span>
       </button>`;
   }
 
@@ -200,28 +190,15 @@ class ButtonCard extends DacCard {
     const stEl = this.$(".st");
     if (stEl) this.text(stEl, this.secondary_(st, dead));
 
-    const badge = this.$(".badge");
-    if (badge) this.text(badge, c.badge ?? "");
-
     this.$(".btn").setAttribute(
       "aria-label",
       `${nameOf(this.hass, c.entity, c.name)}${st ? `, ${localizeState(this.hass, st)}` : ""}`
     );
   }
 
-  /** What the second line says. */
+  /** Wat er onder de naam staat. */
   secondary_(st, dead) {
-    const c = this.config;
     if (dead) return "Niet bereikbaar";
-
-    if (c.secondary_entity) {
-      const s2 = stateOf(this.hass, c.secondary_entity);
-      if (!s2) return "";
-      const unit = s2.attributes.unit_of_measurement;
-      return unit ? `${s2.state} ${unit}` : localizeState(this.hass, s2);
-    }
-
-    if (c.secondary) return c.secondary;
     if (!st) return "";
 
     // A scene has no state worth printing. "Onbekend" under every scene button
@@ -260,8 +237,8 @@ class ButtonCard extends DacCard {
 }
 
 class ButtonEditor extends DacEditor {
-  // Zonder deze stonden alle vinkjes onder Weergave uit terwijl de instelling
-  // aan stond: aanzetten deed dan niets en alleen uitzetten had effect.
+  // Zonder deze stonden alle vinkjes uit terwijl de instelling aanstond:
+  // aanzetten deed dan niets en alleen uitzetten had zichtbaar effect.
   defaults() {
     return {
       layout: "row",
@@ -274,52 +251,45 @@ class ButtonEditor extends DacEditor {
 
   pickers() {
     return [
-      { key: "icon", kind: "icon", label: LABELS.icon, fallback: "star" },
-      { key: "tone", kind: "tone", label: LABELS.tone },
+      { key: "icon", kind: "icon", label: "Icoon", fallback: "star" },
+      { key: "tone", kind: "tone", label: "Kleur" },
     ];
   }
 
+  // Alles op één niveau. De instellingen zaten in uitklapblokken en die openden
+  // leeg, omdat een ha-form-raster zonder `name` zijn velden niet tekent.
   schema() {
     return [
       { name: "entity", selector: sel.entity() },
-      row(
-        { name: "name", selector: sel.text() },
-        {
-          name: "layout",
-          selector: sel.select([
-            { value: "row", label: "Rij" },
-            { value: "tile", label: "Tegel" },
-            { value: "compact", label: "Compact" },
-          ]),
-        }
-      ),
-      section("Weergave", "mdi:eye", [
-        row(
-          { name: "show_icon", selector: sel.bool() },
-          { name: "show_name", selector: sel.bool() }
-        ),
-        row(
-          { name: "show_state", selector: sel.bool() },
-          { name: "state_color", selector: sel.bool() }
-        ),
-        { name: "secondary", selector: sel.text() },
-        { name: "secondary_entity", selector: sel.entity() },
-        { name: "badge", selector: sel.text() },
-      ]),
-      section("Acties", "mdi:gesture-tap", [
-        { name: "tap_action", selector: sel.action() },
-        { name: "hold_action", selector: sel.action() },
-        { name: "double_tap_action", selector: sel.action() },
-      ]),
+      { name: "name", selector: sel.text() },
+      {
+        name: "layout",
+        selector: sel.select([
+          { value: "row", label: "Rij" },
+          { value: "tile", label: "Tegel" },
+          { value: "compact", label: "Compact" },
+        ]),
+      },
+      { name: "show_icon", selector: sel.bool() },
+      { name: "show_name", selector: sel.bool() },
+      { name: "show_state", selector: sel.bool() },
+      { name: "state_color", selector: sel.bool() },
+      { name: "tap_action", selector: sel.action() },
+      { name: "hold_action", selector: sel.action() },
+      { name: "double_tap_action", selector: sel.action() },
     ];
   }
 
   label(s) {
     return (
       {
-        secondary: "Vaste tweede regel",
-        secondary_entity: "Tweede regel uit entiteit",
-        badge: "Hoekje rechtsboven",
+        entity: "Entiteit",
+        name: "Naam (overschrijft die van de entiteit)",
+        layout: "Vorm",
+        show_icon: "Icoon tonen",
+        show_name: "Naam tonen",
+        show_state: "Toestand tonen",
+        state_color: "Kleur volgt de toestand",
       }[s.name] ?? super.label(s)
     );
   }
@@ -327,8 +297,8 @@ class ButtonEditor extends DacEditor {
   helper(s) {
     if (s.name === "entity")
       return "Mag leeg blijven: zonder entiteit wordt dit een navigatieknop.";
-    if (s.name === "state_color")
-      return "Uit betekent dat de knop er hetzelfde uitziet of het apparaat nu aan of uit staat.";
+    if (s.name === "tap_action")
+      return "Leeg laten schakelt de entiteit, of opent meer informatie als schakelen niet kan.";
     return undefined;
   }
 }

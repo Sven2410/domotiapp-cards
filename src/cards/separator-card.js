@@ -27,10 +27,14 @@ class SeparatorCard extends DacCard {
     .chip { width: 30px; height: 30px; }
     .chip .icon, .chip ha-icon { width: 16px; height: 16px; --mdc-icon-size: 16px; }
 
+    /* De naam wordt getoond zoals hij is ingetypt. Er stond hier
+       text-transform: uppercase, en dan geeft het toetsenbord "Woonkamer" en
+       het scherm "WOONKAMER" -- een kaart hoort niet te corrigeren wat iemand
+       schrijft. */
     h3 {
       margin: 0; min-width: 0;
-      font-size: 13px; font-weight: 600; letter-spacing: .1em;
-      text-transform: uppercase; color: var(--dac-ink-2);
+      font-size: 14px; font-weight: 600; letter-spacing: -.01em;
+      color: var(--dac-ink);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
@@ -135,7 +139,7 @@ class SeparatorEditor extends DacEditor {
   pickers() {
     return [
       { key: "icon", kind: "icon", label: "Icoon links", fallback: "star", auto: false },
-      { key: "tone", kind: "tone", label: LABELS.tone, statuses: false },
+      { key: "tone", kind: "tone", label: LABELS.tone },
       { key: "secondary_icon", kind: "icon", label: "Icoon bij de waarde rechts", auto: false },
     ];
   }

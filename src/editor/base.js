@@ -35,8 +35,14 @@ export const sel = {
   action: () => ({ ui_action: {} }),
 };
 
-/** A row of fields side by side, which is how HA groups related settings. */
-export const row = (...schema) => ({ type: "grid", schema });
+/**
+ * Twee velden naast elkaar.
+ *
+ * De lege `name` is niet decoratief: zonder die sleutel rendert ha-form het
+ * raster wel maar de velden erin niet. Dat is waarom een uitklapblok met rijen
+ * erin leeg opende terwijl er drie instellingen in hoorden te staan.
+ */
+export const row = (...schema) => ({ type: "grid", name: "", schema });
 
 /** A collapsible block. Keeps the first screen of the editor short. */
 export const section = (name, icon, schema, expanded = false) => ({
@@ -176,6 +182,10 @@ export class DacEditor extends HTMLElement {
   sync_() {
     if (this.form_) {
       this.form_.hass = this.hass_;
+      // Het schema kan van de config afhangen -- een naamveld per gekozen
+      // persoon, een kleurkeuze per gekozen sensor. Alleen `data` bijwerken
+      // laat die velden nooit verschijnen.
+      this.form_.schema = this.schema();
       this.form_.data = this.config_;
     }
     for (const el of this.pickers_ ?? []) {
