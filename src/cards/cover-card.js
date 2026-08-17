@@ -18,8 +18,8 @@
  * installateur.
  */
 
-import { DacCard, registerCard, registerEditor, toneValue, INCOMPLETE } from "../base.js";
-import { DacEditor, sel, row } from "../editor/base.js";
+import { DacCard, registerCard, registerEditor, rowsFor, toneValue, INCOMPLETE } from "../base.js";
+import { DacEditor, sel } from "../editor/base.js";
 import { icons, resolve } from "../icons.js";
 import { attrsOf, bindActions, moreInfo, nameOf, stateOf } from "../ha.js";
 
@@ -27,35 +27,49 @@ const F = { OPEN: 1, CLOSE: 2, SET_POSITION: 4, STOP: 8 };
 const can = (st, bit) => Boolean((st?.attributes?.supported_features ?? 0) & bit);
 
 /** Wat een rolluik draagt als de config niets zegt. */
-const defaultIcons = (attrs = {}) =>
-  attrs.device_class === "awning" || attrs.device_class === "blind"
-    ? { open: "awning", closed: "awning" }
-    : { open: "shutterOpen", closed: "shutter" };
+const defaultIcons = (attrs = {}) => {
+  switch (attrs.device_class) {
+    case "garage":
+      return { open: "garageOpen", closed: "garageClosed" };
+    case "awning":
+    case "blind":
+      return { open: "awning", closed: "awning" };
+    default:
+      return { open: "shutterOpen", closed: "shutter" };
+  }
+};
 
 class CoverCard extends DacCard {
   static css = /* css */ `
-    :host { display: block; }
+    :host { display: block; height: 100%; }
 
-    .card { padding: 8px 14px; }
+    .card {
+      height: 100%; padding: 6px 12px;
+      display: flex; flex-direction: column; justify-content: center;
+    }
     :host([bare]) .card { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
 
-    .head { display: flex; align-items: baseline; padding: 8px 0 2px; }
-    .head b { font-size: 14px; font-weight: 600; }
-
     .cv {
-      display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center;
-      padding: 10px 0; min-height: var(--dac-row-h);
+      display: grid; grid-template-columns: 40px 1fr auto; gap: 11px; align-items: center;
+      flex: 1 1 auto; min-height: 40px;
     }
-    .cv + .cv, .group { border-top: 1px solid var(--dac-border); }
+    .cv + .cv { border-top: 1px solid var(--dac-border); }
 
     .chip {
-      width: 42px; height: 42px; cursor: pointer;
-      background: color-mix(in srgb, var(--tone) 13%, transparent);
-      border-color: color-mix(in srgb, var(--tone) 30%, transparent);
-      transition: color 220ms ease, background 220ms ease, border-color 220ms ease;
+      width: 40px; height: 40px; cursor: pointer;
+      transition: color 220ms ease, background 220ms ease,
+                  border-color 220ms ease, box-shadow 220ms ease;
     }
     .chip .icon, .chip ha-icon { width: 20px; height: 20px; --mdc-icon-size: 20px; }
-    /* Dicht is een rusttoestand en hoort er ook zo uit te zien. */
+    /* Open licht op, dicht is een rusttoestand. De toestand zit in het icoon en
+       niet in een gemarkeerde knop: een opgelichte pijl-omlaag leest als "deze
+       knop staat aan", en een knop staat nergens aan. */
+    .cv[data-shown="open"] .chip {
+      color: var(--tone);
+      background: color-mix(in srgb, var(--tone) 16%, transparent);
+      border-color: color-mix(in srgb, var(--tone) 38%, transparent);
+      box-shadow: 0 0 14px -3px color-mix(in srgb, var(--tone) 60%, transparent);
+    }
     .cv[data-shown="closed"] .chip {
       color: var(--dac-ink-3); background: rgba(255,255,255,.05); border-color: var(--dac-border);
     }
@@ -72,7 +86,7 @@ class CoverCard extends DacCard {
       border-radius: var(--dac-radius-pill);
     }
     .keys button {
-      width: 38px; height: 34px; display: grid; place-items: center; padding: 0; cursor: pointer;
+      width: 36px; height: 32px; display: grid; place-items: center; padding: 0; cursor: pointer;
       border: 0; background: transparent; color: var(--dac-ink-2);
       border-radius: var(--dac-radius-pill);
       transition: background 180ms ease, color 180ms ease;
@@ -81,10 +95,6 @@ class CoverCard extends DacCard {
     .keys button:active { background: rgba(255,255,255,.14); }
     .keys button .icon { width: 18px; height: 18px; }
     .keys button:disabled { opacity: .3; cursor: default; }
-    .keys button[aria-pressed="true"] {
-      background: color-mix(in srgb, var(--tone) 24%, transparent);
-      color: var(--dac-ink);
-    }
 
     /* ---- positie, alleen bij motoren die terugmelden ---- */
     .pos { grid-column: 1 / -1; margin: 2px 0 4px; }
@@ -113,7 +123,6 @@ class CoverCard extends DacCard {
     const list = config.covers ?? config.entities ?? (config.entity ? [config.entity] : []);
     if (!list.length) return { ...config, [INCOMPLETE]: "Kies minstens één rolluik of zonnescherm." };
     return {
-      group: list.length > 1,
       ...config,
       covers: list.map((c) => (typeof c === "string" ? { entity: c } : c)),
     };
@@ -126,9 +135,9 @@ class CoverCard extends DacCard {
   keysHtml(withStop) {
     return `
       <div class="keys">
-        <button type="button" data-act="open" aria-label="Open" aria-pressed="false">${icons.arrowUp}</button>
+        <button type="button" data-act="open" aria-label="Open">${icons.arrowUp}</button>
         ${withStop ? `<button type="button" data-act="stop" aria-label="Stop">${icons.stop}</button>` : ""}
-        <button type="button" data-act="close" aria-label="Dicht" aria-pressed="false">${icons.arrowDown}</button>
+        <button type="button" data-act="close" aria-label="Dicht">${icons.arrowDown}</button>
       </div>`;
   }
 
@@ -139,7 +148,7 @@ class CoverCard extends DacCard {
     const rows = c.covers
       .map(
         (cv, i) => `
-      <div class="cv" data-i="${i}" data-shown="open" style="--tone:${toneValue(cv.tone ?? c.tone, "solar")}">
+      <div class="cv" data-i="${i}" data-shown="closed" style="--tone:${toneValue(cv.tone ?? c.tone, "solar")}">
         <button class="chip" type="button" aria-label="Meer info"></button>
         <div class="txt"><div class="nm"></div><div class="st"></div></div>
         ${this.keysHtml(c.show_stop !== false)}
@@ -148,24 +157,7 @@ class CoverCard extends DacCard {
       )
       .join("");
 
-    const group =
-      c.group && c.covers.length > 1
-        ? `<div class="cv group" data-i="all" style="--tone:${toneValue(c.tone, "solar")}">
-             <span class="chip" style="cursor:default">${icons.shutterOpen}</span>
-             <div class="txt"><div class="nm">Alles</div></div>
-             ${this.keysHtml(c.show_stop !== false)}
-           </div>`
-        : "";
-
-    return `<div class="card surface">${
-      c.title ? `<div class="head"><b>${c.title}</b></div>` : ""
-    }${rows}${group}</div>`;
-  }
-
-  entitiesFor(i) {
-    return i === "all"
-      ? this.config.covers.map((c) => c.entity)
-      : [this.config.covers[+i].entity];
+    return `<div class="card surface">${rows}</div>`;
   }
 
   wire() {
@@ -181,20 +173,13 @@ class CoverCard extends DacCard {
         btn.addEventListener("click", () => {
           const act = btn.dataset.act;
           const map = { open: "open_cover", stop: "stop_cover", close: "close_cover" };
-          this.hass.callService("cover", map[act], { entity_id: this.entitiesFor(i) });
+          this.hass.callService("cover", map[act], { entity_id: this.config.covers[+i].entity });
 
           if (act === "stop") return;
-          const shown = act === "open" ? "open" : "closed";
-          if (i === "all") {
-            this.config.covers.forEach((_, n) => this.assumed_.set(String(n), shown));
-          } else {
-            this.assumed_.set(i, shown);
-          }
+          this.assumed_.set(i, act === "open" ? "open" : "closed");
           this.paint();
         });
       });
-
-      if (i === "all") return;
 
       const entity = this.config.covers[+i].entity;
       this.teardown_.push(
@@ -223,8 +208,6 @@ class CoverCard extends DacCard {
   paint() {
     this.$$(".cv").forEach((cvEl) => {
       const i = cvEl.dataset.i;
-      if (i === "all") return;
-
       const cfg = this.config.covers[+i];
       const st = stateOf(this.hass, cfg.entity);
       const attrs = attrsOf(this.hass, cfg.entity);
@@ -235,17 +218,18 @@ class CoverCard extends DacCard {
       cvEl.querySelector(".nm").textContent = nameOf(this.hass, cfg.entity, cfg.name);
 
       const hasPos = can(st, F.SET_POSITION) && attrs.current_position != null;
-      const reports = hasPos || state === "open" || state === "closed";
 
       // Welke van de twee iconen: wat de motor meldt, anders wat je zojuist
-      // indrukte, anders open als beginbeeld.
+      // indrukte, anders dicht. Dat laatste is de rustige gok: een opgelicht
+      // icoon trekt aandacht, en aandacht trekken voor iets wat niemand weet is
+      // erger dan het even mis hebben in de andere richting.
       const shown = hasPos
         ? attrs.current_position > 0
           ? "open"
           : "closed"
         : state === "open" || state === "closed"
           ? state
-          : (this.assumed_.get(i) ?? "open");
+          : (this.assumed_.get(i) ?? "closed");
       cvEl.dataset.shown = shown;
 
       const fallback = defaultIcons(attrs);
@@ -285,9 +269,6 @@ class CoverCard extends DacCard {
           return;
         }
         const isOpenBtn = b.dataset.act === "open";
-        const pressed =
-          reports && ((isOpenBtn && shown === "open") || (!isOpenBtn && shown === "closed"));
-        b.setAttribute("aria-pressed", String(pressed));
         b.disabled = dead || (isOpenBtn ? !can(st, F.OPEN) : !can(st, F.CLOSE));
       });
 
@@ -313,14 +294,20 @@ class CoverCard extends DacCard {
     });
   }
 
+  /** Elke rolluikregel is 40px, plus de rand van de kaart en een eventuele schuif. */
+  rows_() {
+    const list = this.config?.covers ?? [];
+    const pos = list.some((c) => can(stateOf(this.hass, c.entity), F.SET_POSITION));
+    return rowsFor(12 + Math.max(1, list.length) * 42 + (pos ? 30 : 0));
+  }
+
   getCardSize() {
-    return this.config.covers?.length ?? 1;
+    return this.rows_();
   }
 
   getGridOptions() {
-    // "auto" laat Home Assistant de hoogte de inhoud volgen. Zelf rijen tellen
-    // leverde een kaart op die een flink stuk doorliep zonder inhoud.
-    return { columns: 12, rows: "auto", min_columns: 6 };
+    const rows = this.rows_();
+    return { columns: 12, rows, min_columns: 6, min_rows: rows, max_rows: rows };
   }
 
   static getConfigElement() {
@@ -342,15 +329,14 @@ class CoverEditor extends DacEditor {
     return [
       { key: "icon_open", kind: "icon", label: "Icoon als het open staat", fallback: "shutterOpen" },
       { key: "icon_closed", kind: "icon", label: "Icoon als het dicht is", fallback: "shutter" },
-      { key: "tone", kind: "tone", label: "Kleur" },
+      { key: "tone", kind: "tone", label: "Kleur", statuses: false },
     ];
   }
 
   schema() {
     return [
       { name: "covers", selector: { entity: { domain: "cover", multiple: true } } },
-      { name: "title", selector: sel.text() },
-      row({ name: "show_stop", selector: sel.bool() }, { name: "group", selector: sel.bool() }),
+      { name: "show_stop", selector: sel.bool() },
     ];
   }
 
@@ -359,7 +345,6 @@ class CoverEditor extends DacEditor {
       {
         covers: "Rolluiken",
         show_stop: "Stopknop tonen",
-        group: "Alles-tegelijk-regel",
       }[s.name] ?? super.label(s)
     );
   }

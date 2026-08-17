@@ -45,7 +45,14 @@ const CHIPS = {
   sunset: { icon: "sunset", tone: "warn", label: "Zonsondergang" },
 };
 
-const DEFAULT_CHIPS = ["humidity", "wind", "uv", "precipitation", "sunset"];
+/**
+ * Vast, en niet instelbaar.
+ *
+ * Dit is wat een header hoort te tonen en het is ook wat de oude domotiapp-header
+ * toonde. Een keuzelijst erbij levert vooral de vraag op welke vijf je ook alweer
+ * had aangevinkt.
+ */
+const CHIP_ORDER = ["humidity", "wind", "uv", "precipitation", "sunset"];
 
 const bearing = (deg) => {
   if (deg == null || Number.isNaN(+deg)) return "";
@@ -60,13 +67,13 @@ class HeaderCard extends DacCard {
     :host([narrow]) { display: none; }
 
     .strip {
+      min-height: 56px;
       /* Wrappen in plaats van de details wegduwen. In een smalle kolom zou een
          niet-wrappende strip de weerchips tot nul breedte knijpen en het masker
          zou ze dan onzichtbaar maken -- weg zonder dat iets kapot lijkt, wat de
          vervelendste soort verdwijning is. */
       display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
-      padding: 10px 16px;
-      min-height: 52px;
+      padding: 8px 16px;
       background: var(--dac-surface);
       border: 1px solid var(--dac-border);
       border-radius: var(--dac-radius);
@@ -91,14 +98,13 @@ class HeaderCard extends DacCard {
 
     /* De weerdetails krijgen de ruimte die overblijft en schuiven horizontaal
        weg als die op is, in plaats van de strip twee regels hoog te maken. */
+    /* Wrappen, niet maskeren. Een masker over een rij die net niet past snijdt
+       de laatste waarde half af -- "20:5" leest als een storing, niet als een
+       hint dat er meer staat. */
     .chips {
       flex: 1 1 260px; min-width: 0; order: 3;
-      display: flex; align-items: center; gap: 16px;
-      overflow-x: auto; scrollbar-width: none;
-      -webkit-mask-image: linear-gradient(90deg, #000 0 92%, transparent 100%);
-      mask-image: linear-gradient(90deg, #000 0 92%, transparent 100%);
+      display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px;
     }
-    .chips::-webkit-scrollbar { display: none; }
     .chips:empty { display: none; }
     .chip2 {
       display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
@@ -111,7 +117,12 @@ class HeaderCard extends DacCard {
     .now .ic { display: flex; color: var(--wtone); }
     .now .ic .icon, .now .ic ha-icon { width: 22px; height: 22px; --mdc-icon-size: 22px; }
     .now .temp { font-size: 21px; font-weight: 300; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-    .now .temp span { font-size: .55em; color: var(--dac-ink-3); }
+        /* Het gradenteken als superscript, met lucht ertussen. Strak tegen het
+       cijfer aan gezet leest het als een rendermisser. */
+    .now .temp span {
+      font-size: .5em; margin-left: 3px; vertical-align: .5em;
+      color: var(--dac-ink-3); letter-spacing: .01em;
+    }
     .now .cond {
       font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
       color: var(--dac-ink-3); white-space: nowrap;
@@ -125,7 +136,8 @@ class HeaderCard extends DacCard {
     }
 
     @media (max-width: 900px) {
-      .strip { gap: 12px; }
+      .strip {
+      min-height: 56px; gap: 12px; }
       .now .cond { display: none; }
     }
   `;
@@ -137,14 +149,13 @@ class HeaderCard extends DacCard {
       show_chips: true,
       show_rule: true,
       hide_below: 768,
-      chips: DEFAULT_CHIPS,
       ...config,
     };
   }
 
   watched() {
     const c = this.config;
-    return [c.weather, c.weather_uv, c.sun, c.person, c.precipitation_entity].filter(Boolean);
+    return [c.weather, c.weather_uv, c.sun, c.precipitation_entity].filter(Boolean);
   }
 
   template() {
@@ -197,13 +208,11 @@ class HeaderCard extends DacCard {
 
   paintClock_() {
     const now = new Date();
-    const name =
-      this.config.name ??
-      (this.config.person ? nameOf(this.hass, this.config.person, null) : null) ??
-      this.hass?.user?.name ??
-      "";
-
-    const hello = this.config.greeting ?? greeting(now);
+    // De naam is die van de ingelogde gebruiker, tenzij de config er een geeft.
+    // Een persoon-entiteit aanwijzen zou betekenen dat iedereen in huis dezelfde
+    // begroeting krijgt, en dat is precies niet waar een begroeting voor is.
+    const name = this.config.name ?? this.hass?.user?.name ?? "";
+    const hello = greeting(now);
     this.$(".hello").innerHTML = name ? `${hello}, <b>${name}</b>` : hello;
 
     this.text(".date", `${WEEKDAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`);
@@ -249,7 +258,7 @@ class HeaderCard extends DacCard {
     const chips = this.$(".chips");
     if (!chips) return;
 
-    const wanted = (c.chips ?? DEFAULT_CHIPS).map((key) => this.chip_(key, wa)).filter(Boolean);
+    const wanted = CHIP_ORDER.map((key) => this.chip_(key, wa)).filter(Boolean);
     const sig = wanted.map((x) => `${x.key}${x.value}`).join("|");
     if (chips.dataset.sig === sig) return;
     chips.dataset.sig = sig;
@@ -342,7 +351,7 @@ class HeaderCard extends DacCard {
   }
 
   getGridOptions() {
-    return { columns: "full", rows: "auto" };
+    return { columns: "full", rows: 1, min_rows: 1, max_rows: 1 };
   }
 
   static getConfigElement() {
@@ -351,7 +360,7 @@ class HeaderCard extends DacCard {
 
   static getStubConfig(hass) {
     const weather = Object.keys(hass?.states ?? {}).find((e) => e.startsWith("weather."));
-    return { weather, sun: "sun.sun", chips: DEFAULT_CHIPS };
+    return { weather, sun: "sun.sun" };
   }
 }
 
@@ -363,12 +372,11 @@ class HeaderEditor extends DacEditor {
       show_chips: true,
       show_rule: true,
       hide_below: 768,
-      chips: DEFAULT_CHIPS,
     };
   }
 
   pickers() {
-    return [{ key: "tone", kind: "tone", label: "Kleur weericoon" }];
+    return [{ key: "tone", kind: "tone", label: "Kleur weericoon", statuses: false }];
   }
 
   schema() {
@@ -381,21 +389,7 @@ class HeaderEditor extends DacEditor {
         { name: "sun", selector: sel.entity("sun") },
         { name: "precipitation_entity", selector: sel.entity("sensor") }
       ),
-      row(
-        { name: "person", selector: sel.entity(["person"]) },
-        { name: "name", selector: sel.text() }
-      ),
-      { name: "greeting", selector: sel.text() },
-      {
-        name: "chips",
-        selector: {
-          select: {
-            multiple: true,
-            mode: "list",
-            options: Object.entries(CHIPS).map(([value, v]) => ({ value, label: v.label })),
-          },
-        },
-      },
+      { name: "name", selector: sel.text() },
       section("Weergave", "mdi:eye", [
         { name: "hide_below", selector: sel.number(0, 1400, 8) },
         row(
@@ -417,12 +411,11 @@ class HeaderEditor extends DacEditor {
         weather: "Weer (temperatuur, wind)",
         weather_uv: "Tweede weerbron (UV-index)",
         precipitation_entity: "Neerslagsensor",
-        chips: "Welke details",
-        greeting: "Eigen begroeting",
+
         show_rule: "Accentlijn tonen",
         hide_below: "Verbergen onder breedte (px)",
         bare: "Zonder kaartrand",
-        name: "Vaste naam",
+        name: "Naam",
       }[s.name] ?? super.label(s)
     );
   }
@@ -434,9 +427,8 @@ class HeaderEditor extends DacEditor {
       return "Een sensor in mm of mm/h, bijvoorbeeld neerslagintensiteit of regen laatste uur.";
     if (s.name === "hide_below")
       return "768 verbergt de header op telefoons en houdt hem op tablets en desktops. 0 zet het uit.";
-    if (s.name === "greeting")
-      return "Leeg laten voor Goedemorgen / Goedemiddag / Goedenavond op de klok.";
-    if (s.name === "person") return "Leeg laten om de naam van de ingelogde gebruiker te tonen.";
+    if (s.name === "name")
+      return "Leeg laten voor de naam van de ingelogde gebruiker.";
     return undefined;
   }
 }

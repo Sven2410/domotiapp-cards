@@ -42,6 +42,15 @@ export const icons = {
     <path d="M5.4 20.4v-9.1h13.2v9.1"/>
     <path d="M8.2 20.4v-5.6h7.6v5.6M8.2 17.6h7.6"/>`),
 
+  /* Garagedeur open en dicht: het paneel staat omhoog of het staat ervoor. */
+  garageOpen: draw(`<path d="M3.4 10.8 12 5.2l8.6 5.6"/>
+    <path d="M5.4 20.4v-9.1h13.2v9.1"/>
+    <path d="M7.6 14.4h8.8M7.6 12.4h8.8"/>`),
+
+  garageClosed: draw(`<path d="M3.4 10.8 12 5.2l8.6 5.6"/>
+    <path d="M5.4 20.4v-9.1h13.2v9.1"/>
+    <path d="M7.6 13.2h8.8M7.6 15.4h8.8M7.6 17.6h8.8M7.6 19.8h8.8"/>`),
+
   /* ---- covers. A shutter reads by its slats; an awning by its slope. ---- */
   shutter: draw(`<path d="M3.6 4.2h16.8M5.2 4.2v13.4M18.8 4.2v13.4"/>
     <path d="M5.2 7.6h13.6M5.2 11h13.6M5.2 14.4h13.6M5.2 17.6h13.6"/>`),

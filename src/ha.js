@@ -216,60 +216,56 @@ export function runAction(node, hass, config, action) {
 /**
  * Wire tap / hold / double-tap onto an element.
  *
- * Written against pointer events rather than click so a hold does not also fire
- * a tap, and so a drag that starts on a button (scrolling a row of them with a
- * finger) is not read as a press. 500ms is Home Assistant's own hold threshold;
- * matching it means muscle memory carries over.
+ * Alles hangt aan `click`, en de duur wordt achteraf uit `pointerdown` gelezen.
+ * Dat is de derde poging en de reden dat het nu wel klopt: de vorige twee
+ * hielden zelf bij of er "al" een hold gaande was, en zodra Home Assistant een
+ * pointerup opslokt -- wat op een echt dashboard gebeurt, waar een kaart in
+ * lagen zit die de editor niet heeft -- bleef die vlag hangen en werd élke
+ * volgende tik onderdrukt. Vandaar dat het in de editor werkte en op het
+ * dashboard niet.
+ *
+ * Zonder eigen timer is er niets dat kan blijven hangen. `click` is de eigen
+ * lezing van de browser van "dit element is geactiveerd" en komt overal
+ * doorheen, inclusief toetsenbord en hulptechnologie. Het verschil is dat een
+ * hold nu bij loslaten afgaat in plaats van na 500 ms; dat is de prijs, en die
+ * is lager dan een knop die niets doet.
  *
  * Returns a teardown function.
  */
 export function bindActions(el, { onTap, onHold, onDouble }) {
-  let timer = null;
-  let held = false;
+  const HOLD_MS = 500;
+  const DOUBLE_MS = 260;
+
+  let downAt = 0;
   let taps = 0;
   let tapTimer = null;
 
-  const clear = () => {
-    if (timer) clearTimeout(timer);
-    timer = null;
-  };
-
   const down = (e) => {
     if (e.button != null && e.button !== 0) return;
-    held = false;
-    clear();
-    if (!onHold) return;
-    timer = setTimeout(() => {
-      held = true;
-      // A hold that lands should feel like it landed, on a device that can.
-      navigator.vibrate?.(18);
-      onHold();
-    }, 500);
+    downAt = Date.now();
   };
 
-  // The tap fires on `click`, not on `pointerup`.
-  //
-  // Deriving it from pointerup was wrong: it worked in the card editor's
-  // preview and did nothing on the real dashboard, because Home Assistant wraps
-  // a live card in layers that can swallow or retarget a raw pointer sequence.
-  // `click` is the browser's own reading of "this element was activated" and it
-  // survives all of that, including keyboard activation and assistive tech.
   const click = () => {
-    // Suppressed after a hold, or the long-press would also fire the tap.
-    if (held) {
-      held = false;
+    const heldFor = downAt ? Date.now() - downAt : 0;
+    downAt = 0;
+
+    if (onHold && heldFor >= HOLD_MS) {
+      navigator.vibrate?.(18);
+      onHold();
       return;
     }
+
     if (!onDouble) {
       onTap?.();
       return;
     }
+
     taps++;
     if (taps === 1) {
       tapTimer = setTimeout(() => {
         taps = 0;
         onTap?.();
-      }, 260);
+      }, DOUBLE_MS);
       return;
     }
     clearTimeout(tapTimer);
@@ -277,25 +273,14 @@ export function bindActions(el, { onTap, onHold, onDouble }) {
     onDouble();
   };
 
-  const cancel = () => {
-    clear();
-  };
-
   el.addEventListener("pointerdown", down);
-  el.addEventListener("pointerup", cancel);
-  el.addEventListener("pointercancel", cancel);
-  el.addEventListener("pointerleave", cancel);
   el.addEventListener("click", click);
-  // Long-press on a touch screen otherwise opens the browser's own menu.
+  // Lang indrukken op een aanraakscherm opent anders het eigen menu van de browser.
   el.addEventListener("contextmenu", (e) => e.preventDefault());
 
   return () => {
-    clear();
     clearTimeout(tapTimer);
     el.removeEventListener("pointerdown", down);
-    el.removeEventListener("pointerup", cancel);
-    el.removeEventListener("pointercancel", cancel);
-    el.removeEventListener("pointerleave", cancel);
     el.removeEventListener("click", click);
   };
 }

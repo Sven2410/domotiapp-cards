@@ -17,7 +17,7 @@
  * reads as the green bin without spending the colour that means "in orde".
  */
 
-import { DacCard, registerCard, registerEditor, toneValue, INCOMPLETE } from "../base.js";
+import { DacCard, registerCard, registerEditor, rowsFor, toneValue, TONE_LABELS, TONES, INCOMPLETE } from "../base.js";
 import { DacEditor, sel, row, section } from "../editor/base.js";
 import { resolve } from "../icons.js";
 import { dayCount, daysBetween, nameOf, parseDate, relativeDay, shortDate, stateOf } from "../ha.js";
@@ -49,35 +49,34 @@ const cleanLabel = (name) =>
 
 class WasteCard extends DacCard {
   static css = /* css */ `
-    :host { display: block; }
+    :host { display: block; height: 100%; }
 
-    .card { padding: 14px; }
+    .card {
+      height: 100%; padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
     :host([bare]) .card { background: none; border: 0; box-shadow: none; padding: 0; }
-
-    .head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
-    .head b { font-size: 14px; font-weight: 600; }
-    .head:empty { display: none; }
 
     /* ---- hero ---- */
     .hero {
-      display: flex; align-items: center; gap: 14px;
-      padding: 14px 16px; border-radius: var(--dac-radius-sm);
+      display: flex; align-items: center; gap: 12px; flex: 0 0 auto;
+      min-height: 56px; padding: 8px 12px; border-radius: var(--dac-radius-sm);
       background: color-mix(in srgb, var(--tone) 11%, transparent);
       border: 1px solid color-mix(in srgb, var(--tone) 34%, transparent);
     }
     .hero .bin {
-      width: 46px; height: 46px; flex: 0 0 auto; display: grid; place-items: center;
+      width: 40px; height: 40px; flex: 0 0 auto; display: grid; place-items: center;
       border-radius: var(--dac-radius-sm); color: var(--tone);
       background: color-mix(in srgb, var(--tone) 18%, transparent);
     }
-    .hero .bin .icon, .hero .bin ha-icon { width: 24px; height: 24px; --mdc-icon-size: 24px; }
+    .hero .bin .icon, .hero .bin ha-icon { width: 21px; height: 21px; --mdc-icon-size: 21px; }
     .hero .what { min-width: 0; }
     .hero .big {
-      font-size: 21px; font-weight: 500; letter-spacing: -.02em; line-height: 1.15;
+      font-size: 18px; font-weight: 500; letter-spacing: -.02em; line-height: 1.15;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .hero .when { margin-left: auto; text-align: right; flex: 0 0 auto; }
-    .hero .when .n { font-size: 21px; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+    .hero .when .n { font-size: 18px; font-weight: 500; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 
     /* Today and tomorrow are the only two states that need to shout. */
     :host([urgency="today"]) .hero { animation: pulse 2.6s ease-in-out infinite; }
@@ -87,10 +86,10 @@ class WasteCard extends DacCard {
     }
 
     /* ---- list ---- */
-    .list { margin-top: 12px; }
+    .list { flex: 1 1 auto; display: flex; flex-direction: column; }
     .r {
       display: grid; grid-template-columns: 10px 1fr auto; gap: 12px; align-items: center;
-      padding: 9px 2px; font-size: 13px;
+      flex: 1 1 auto; min-height: 32px; padding: 0 2px; font-size: 13px;
     }
     .r + .r { border-top: 1px solid var(--dac-border); }
     .r i { width: 10px; height: 10px; border-radius: 3px; background: var(--tone); }
@@ -133,11 +132,14 @@ class WasteCard extends DacCard {
 
         const label = cfg.label ?? cleanLabel(nameOf(this.hass, cfg.entity, cfg.name));
         const style = fractionStyle(cfg.label ?? cfg.entity + label);
+        // Wat de config zegt wint van wat de naam suggereert: een gemeente die
+        // haar bakken anders kleurt hoeft niet met de regexen te vechten.
+        const perEntity = this.config.tones?.[cfg.entity];
         return {
           label,
           date,
           days: daysBetween(now, date),
-          tone: toneValue(cfg.tone ?? style.tone),
+          tone: toneValue(perEntity ?? cfg.tone ?? style.tone),
           icon: cfg.icon ?? style.icon,
         };
       })
@@ -221,12 +223,28 @@ class WasteCard extends DacCard {
     }
   }
 
+  /**
+   * Eén rasterrij per fractie.
+   *
+   * Vier fracties is dus vier rijen: precies de hoogte van vier Mushroom-kaarten
+   * ernaast, en dat is waar de kaart naast komt te staan. De inhoud is lager dan
+   * dat, maar de lijstregels rekken mee, zodat er geen gat onderin valt maar de
+   * regels wat meer lucht krijgen.
+   */
+  rows_() {
+    const n = this.config?.sensors?.length ?? 1;
+    if (this.config?.show_list === false) return 1;
+    if (this.config?.show_hero === false) return Math.max(1, rowsFor(20 + n * 33));
+    return Math.max(2, n);
+  }
+
   getCardSize() {
-    return 2 + this.config.sensors.length;
+    return this.rows_();
   }
 
   getGridOptions() {
-    return { columns: 12, rows: this.config.sensors.length * 2 + 3, min_columns: 6, min_rows: 4 };
+    const rows = this.rows_();
+    return { columns: 12, rows, min_columns: 6, min_rows: rows, max_rows: rows };
   }
 
   static getConfigElement() {
@@ -242,11 +260,49 @@ class WasteCard extends DacCard {
   }
 }
 
+/**
+ * De editor werkt plat, de config houdt de kleuren in een map.
+ *
+ * `ha-form` kent geen herhalende rij, dus krijgt elke gekozen sensor een eigen
+ * keuzelijst `kleur:<entity>`, die `serialize` terugvouwt naar `tones`.
+ */
 class WasteEditor extends DacEditor {
+  defaults() {
+    return { show_hero: true, show_list: true };
+  }
+
+  setConfig(config) {
+    const flat = { ...config };
+    for (const [id, tone] of Object.entries(config.tones ?? {})) flat[`kleur:${id}`] = tone;
+    delete flat.tones;
+    super.setConfig(flat);
+  }
+
+  serialize(config) {
+    const out = { ...config };
+    const tones = {};
+    for (const k of Object.keys(out)) {
+      if (!k.startsWith("kleur:")) continue;
+      if (out[k]) tones[k.slice(6)] = out[k];
+      delete out[k];
+    }
+    if (Object.keys(tones).length) out.tones = tones;
+    else delete out.tones;
+    return out;
+  }
+
   schema() {
+    const ids = this.config_?.sensors ?? [];
+    const options = Object.keys(TONES).map((value) => ({
+      value,
+      label: TONE_LABELS[value] ?? value,
+    }));
     return [
       { name: "sensors", selector: { entity: { domain: "sensor", multiple: true } } },
-      { name: "title", selector: sel.text() },
+      ...ids
+        .map((s) => (typeof s === "string" ? s : s.entity))
+        .filter(Boolean)
+        .map((id) => ({ name: `kleur:${id}`, selector: sel.select(options) })),
       section("Weergave", "mdi:eye", [
         row(
           { name: "show_hero", selector: sel.bool() },
@@ -258,6 +314,11 @@ class WasteEditor extends DacEditor {
   }
 
   label(s) {
+    if (s.name.startsWith("kleur:")) {
+      const id = s.name.slice(6);
+      const fn = this.hass?.states?.[id]?.attributes?.friendly_name ?? id;
+      return `Kleur voor ${cleanLabel(fn) || fn}`;
+    }
     return (
       {
         sensors: "Afvalsensoren",
@@ -270,7 +331,7 @@ class WasteEditor extends DacEditor {
 
   helper(s) {
     if (s.name === "sensors")
-      return "Sensoren waarvan de toestand een datum is, bijvoorbeeld 18-08-2026. De kaart sorteert zelf en kiest de bakkleur op de naam.";
+      return "Sensoren waarvan de toestand een datum is, bijvoorbeeld 18-08-2026. De kaart sorteert zelf; laat een kleur leeg om de bakkleur op de naam te laten kiezen.";
     return undefined;
   }
 }

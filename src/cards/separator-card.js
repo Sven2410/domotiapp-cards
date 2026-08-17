@@ -17,12 +17,11 @@ import { localizeState, stateOf } from "../ha.js";
 
 class SeparatorCard extends DacCard {
   static css = /* css */ `
-    :host { display: block; }
+    :host { display: block; height: 100%; }
 
     .sep {
       display: flex; align-items: center; gap: 10px;
-      min-height: 34px;
-      padding: var(--pad-y, 2px) 0;
+      height: 100%; min-height: 34px;
     }
 
     .chip { width: 30px; height: 30px; }
@@ -135,9 +134,9 @@ class SeparatorEditor extends DacEditor {
 
   pickers() {
     return [
-      { key: "icon", kind: "icon", label: "Icoon links", fallback: "star" },
-      { key: "tone", kind: "tone", label: LABELS.tone },
-      { key: "secondary_icon", kind: "icon", label: "Icoon bij de waarde rechts", fallback: "question" },
+      { key: "icon", kind: "icon", label: "Icoon links", fallback: "star", auto: false },
+      { key: "tone", kind: "tone", label: LABELS.tone, statuses: false },
+      { key: "secondary_icon", kind: "icon", label: "Icoon bij de waarde rechts", auto: false },
     ];
   }
 

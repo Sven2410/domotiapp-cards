@@ -73,6 +73,9 @@ class DacTonePicker extends HTMLElement {
     this.shadowRoot.adoptedStyleSheets = sheets;
     this.value_ = "";
     this.label = "Kleur";
+    // Statuskleuren betekenen iets. Op een kaart waar kleur puur identiteit is
+    // -- een header, een sectiekop, een rolluik -- horen ze niet in de keuze.
+    this.statuses = true;
   }
 
   set value(v) {
@@ -99,18 +102,22 @@ class DacTonePicker extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <div class="label"></div>
       <div class="box">
-        <h4>Identiteit</h4>
+        ${this.statuses ? "<h4>Identiteit</h4>" : ""}
         <div class="row">
           <button type="button" class="sw auto" data-tone="" title="Automatisch"
             aria-label="Automatisch" aria-pressed="false">${icons.check}</button>
           ${IDENTITY.map((k) => this.swatch(k)).join("")}
         </div>
-        <h4>Status</h4>
-        <div class="row">${STATUS.map((k) => this.swatch(k)).join("")}</div>
-        <p class="note">
-          Statuskleuren betekenen iets: goed, let op, kritiek. Gebruik ze niet om
-          een kaart mooier te maken &mdash; dan zegt rood straks niets meer.
-        </p>
+        ${
+          this.statuses
+            ? `<h4>Status</h4>
+               <div class="row">${STATUS.map((k) => this.swatch(k)).join("")}</div>
+               <p class="note">
+                 Statuskleuren betekenen iets: goed, let op, kritiek. Gebruik ze niet om
+                 een kaart mooier te maken &mdash; dan zegt rood straks niets meer.
+               </p>`
+            : ""
+        }
         <div class="chosen"></div>
       </div>`;
 

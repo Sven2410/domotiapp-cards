@@ -33,7 +33,7 @@ import {
 
 class ButtonCard extends DacCard {
   static css = /* css */ `
-    :host { display: block; }
+    :host { display: block; height: 100%; }
 
     .btn {
       position: relative; overflow: hidden;
@@ -72,7 +72,7 @@ class ButtonCard extends DacCard {
     }
 
     /* ---- row: the default. A pill you can put six of in a column. ---- */
-    :host([layout="row"]) .btn { min-height: var(--dac-row-h); padding: 9px 14px 9px 9px; }
+    :host([layout="row"]) .btn { min-height: 56px; padding: 8px 14px 8px 8px; }
     :host([layout="row"]) .chip { width: 38px; height: 38px; }
     :host([layout="row"]) .chip .icon, :host([layout="row"]) .chip ha-icon { width: 20px; height: 20px; }
 
@@ -241,9 +241,9 @@ class ButtonCard extends DacCard {
 
   getGridOptions() {
     if (this.config?.layout === "tile") {
-      return { columns: 6, rows: 2, min_columns: 3, min_rows: 2 };
+      return { columns: 6, rows: 2, min_columns: 3, min_rows: 2, max_rows: 2 };
     }
-    return { columns: 12, rows: 1, min_columns: 4, min_rows: 1 };
+    return { columns: 12, rows: 1, min_columns: 4, min_rows: 1, max_rows: 1 };
   }
 
   static getConfigElement() {
@@ -260,6 +260,18 @@ class ButtonCard extends DacCard {
 }
 
 class ButtonEditor extends DacEditor {
+  // Zonder deze stonden alle vinkjes onder Weergave uit terwijl de instelling
+  // aan stond: aanzetten deed dan niets en alleen uitzetten had effect.
+  defaults() {
+    return {
+      layout: "row",
+      state_color: true,
+      show_state: true,
+      show_name: true,
+      show_icon: true,
+    };
+  }
+
   pickers() {
     return [
       { key: "icon", kind: "icon", label: LABELS.icon, fallback: "star" },

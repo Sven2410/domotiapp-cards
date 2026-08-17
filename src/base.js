@@ -83,6 +83,18 @@ const placeholder = (message) => `
     <span><b>Nog niets gekozen</b><span>${message}</span></span>
   </div>`;
 
+/**
+ * Home Assistant's sections-raster: een rij is 56px hoog met 8px ertussen.
+ *
+ * Een kaart van n rijen is dus 64n - 8 pixels. Die maat staat hier omdat elke
+ * kaart in de familie dezelfde hoogte moet halen als een Mushroom-kaart ernaast
+ * -- een kolom waarin de ene kaart 56 en de andere 64 hoog is, leest als slordig
+ * werk, ook al klopt elke kaart op zichzelf.
+ */
+export const ROW_H = 56;
+export const ROW_GAP = 8;
+export const rowsFor = (px) => Math.max(1, Math.ceil((px + ROW_GAP) / (ROW_H + ROW_GAP)));
+
 export class DacCard extends HTMLElement {
   /** Component-specific CSS, overridden by subclasses. */
   static css = "";

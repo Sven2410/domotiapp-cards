@@ -15,6 +15,15 @@
   h1 { font-size: 22px; font-weight: 300; letter-spacing: -.02em; margin: 0 0 4px; }
   p.lead { margin: 0 0 26px; font-size: 13px; color: rgba(232,228,222,.62); }
   .cols { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); align-items: start; }
+  /* Meetlat: HA's sections-raster is 56px per rij met 8px ertussen. */
+  .ruler { position: relative; }
+  .ruler::before {
+    content: ""; position: absolute; inset: 0 -10px 0 auto; width: 4px; border-radius: 2px;
+    background: repeating-linear-gradient(180deg,
+      rgba(25,143,217,.55) 0 56px, transparent 56px 64px);
+    pointer-events: none;
+  }
+  .h { font-size: 10px; color: rgba(232,228,222,.38); font-variant-numeric: tabular-nums; }
   .col { display: flex; flex-direction: column; gap: 10px; }
   h2 {
     font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
@@ -267,6 +276,20 @@ cols.lastElementChild.appendChild(compact);
 window.addEventListener("error", (e) => log(`FOUT: ${e.message}`, "err"));
 window.addEventListener("unhandledrejection", (e) => log(`FOUT: ${e.reason}`, "err"));
 log("werkbank geladen");
+
+// Meet elke kaart: hoort een heel aantal Mushroom-rijen te zijn (56, 120, 184, 248...).
+requestAnimationFrame(() => {
+  for (const c of cards) {
+    const h = Math.round(c.getBoundingClientRect().height);
+    const rows = c.getGridOptions?.().rows;
+    const ideal = typeof rows === "number" ? rows * 56 + (rows - 1) * 8 : null;
+    const tag = document.createElement("div");
+    tag.className = "h";
+    tag.textContent = `${c.tagName.toLowerCase().replace("domotiapp-","").replace("-card","")}: ${h}px` +
+      (ideal !== null ? `  |  ${rows} rij(en) = ${ideal}px  ${h === ideal ? "OK" : "AFWIJKING " + (h - ideal)}` : "  |  geen rows");
+    c.parentElement?.insertBefore(tag, c.nextSibling);
+  }
+});
 </script>
 </body>
 </html>

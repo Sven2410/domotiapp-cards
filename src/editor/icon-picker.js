@@ -19,7 +19,7 @@ import { tokens } from "../theme.js";
  */
 const GROUPS = [
   ["Woning", ["house", "floorB", "floor1", "floor2", "garage", "door", "window", "grid"]],
-  ["Rolluiken", ["shutter", "shutterOpen", "awning", "arrowUp", "arrowDown", "stop"]],
+  ["Rolluiken", ["shutter", "shutterOpen", "awning", "garageOpen", "garageClosed", "arrowUp", "arrowDown", "stop"]],
   ["Licht en stroom", ["bulb", "bulbGroup", "switchOn", "power", "plug", "bolt", "battery"]],
   ["Personen", ["person", "people", "away"]],
   ["Apparaten", ["tv", "speaker", "camera", "car", "washer", "dishwasher", "printer", "fan", "airco", "radio"]],
@@ -118,6 +118,9 @@ class DacIconPicker extends HTMLElement {
     this.value_ = "";
     this.label = "Icoon";
     this.fallback = "question";
+    // Sommige velden hebben geen zinnige automatische keuze -- daar is leeg
+    // laten geen instelling maar een half ingevuld formulier.
+    this.auto = true;
   }
 
   set value(v) {
@@ -190,12 +193,14 @@ class DacIconPicker extends HTMLElement {
     const v = this.value_;
     const shown = v || this.fallback || "question";
     this.$(".preview").innerHTML = resolve(shown, this.fallback);
-    this.$(".who b").textContent = v || "Automatisch";
+    this.$(".who b").textContent = v || (this.auto ? "Automatisch" : "Kies een icoon");
     this.$(".who small").textContent = v
       ? v.includes(":")
         ? "Home Assistant-icoon"
         : "DomotiApp-icoon"
-      : "Past zich aan de entiteit aan";
+      : this.auto
+        ? "Past zich aan de entiteit aan"
+        : "Nog niets gekozen";
 
     this.shadowRoot
       .querySelectorAll(".opt")

@@ -144,6 +144,8 @@ export class DacEditor extends HTMLElement {
         );
         el.label = def.label;
         el.fallback = def.fallback;
+        if (def.auto === false) el.auto = false;
+        if (def.statuses === false) el.statuses = false;
         el.hass = this.hass_;
         el.value = this.config_[def.key];
         el.addEventListener("value-changed", (e) => {
@@ -202,11 +204,23 @@ export class DacEditor extends HTMLElement {
     this.sync_();
     this.dispatchEvent(
       new CustomEvent("config-changed", {
-        detail: { config: next },
+        detail: { config: this.serialize(next) },
         bubbles: true,
         composed: true,
       })
     );
+  }
+
+  /**
+   * Turn the form's own shape back into the config that gets written to YAML.
+   *
+   * `ha-form` works on a flat object, but a config is sometimes a list of
+   * objects -- a person with a name of their own, a fraction with its colour.
+   * A card that needs that expands the list into flat fields in `setConfig` and
+   * folds it back here, so the dashboard never sees the editor's scaffolding.
+   */
+  serialize(config) {
+    return config;
   }
 }
 
