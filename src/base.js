@@ -1,0 +1,214 @@
+/**
+ * The base every DomotiApp card is built on -- no framework, no build step.
+ *
+ * Rendering is split in two on purpose. `template()` builds the DOM once;
+ * `paint()` writes values into it on every relevant state change. Rebuilding
+ * innerHTML instead would be less code and would also throw away focus, a
+ * half-finished drag on a slider, and the browser's own scroll position in a
+ * row of buttons -- every time any entity in the house changed.
+ */
+
+import { baseCss, sheet, tokens } from "./theme.js?v=0.1.0";
+import { entitiesChanged } from "./ha.js?v=0.1.0";
+
+const hostCss = /* css */ `
+  :host {
+    ${tokens}
+    display: block;
+    font-family: var(--dac-font);
+    color: var(--dac-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  :host([hidden]) { display: none; }
+`;
+
+/**
+ * The palette a config may name.
+ *
+ * Names rather than hex, so a customer's dashboard follows the token file when
+ * it moves. `status` names are separated in the editor, because handing someone
+ * a colour called "good" to use as decoration is how status stops meaning
+ * anything.
+ */
+export const TONES = {
+  accent: "var(--dac-accent-hi)",
+  solar: "var(--dac-solar)",
+  house: "var(--dac-house)",
+  water: "var(--dac-grid-in)",
+  magenta: "var(--dac-grid-out)",
+  pink: "var(--dac-device-1)",
+  teal: "var(--dac-device-2)",
+  lit: "var(--dac-lit)",
+  good: "var(--dac-good)",
+  warn: "var(--dac-warn)",
+  bad: "var(--dac-bad)",
+  neutral: "var(--dac-ink-3)",
+};
+
+export const TONE_LABELS = {
+  accent: "Accent",
+  solar: "Oranje",
+  house: "Blauw",
+  water: "Lichtblauw",
+  magenta: "Magenta",
+  pink: "Roze",
+  teal: "Groenblauw",
+  lit: "Lampgeel",
+  good: "Goed",
+  warn: "Let op",
+  bad: "Kritiek",
+  neutral: "Neutraal",
+};
+
+/** A tone name, a CSS variable, or a plain colour -- all end up usable. */
+export const toneValue = (tone, fallback = "accent") =>
+  TONES[tone] ?? (tone && /[#(]|^var/.test(tone) ? tone : TONES[fallback]);
+
+export class DacCard extends HTMLElement {
+  /** Component-specific CSS, overridden by subclasses. */
+  static css = "";
+
+  static get styleSheets_() {
+    if (!Object.hasOwn(this, "sheets_")) {
+      this.sheets_ = [sheet(hostCss + baseCss + this.css)];
+    }
+    return this.sheets_;
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this.shadowRoot.adoptedStyleSheets = new.target.styleSheets_;
+    this.built_ = false;
+    this.teardown_ = [];
+  }
+
+  /* ------------------------------------------------ Lovelace contract */
+
+  setConfig(config) {
+    const next = this.validate(config ?? {});
+    this.config = next;
+    // A config edit can change the shape of the card, not just its values, so
+    // the DOM is thrown away rather than patched. This runs on every keystroke
+    // in the editor's preview and nowhere else.
+    if (this.built_) {
+      this.destroy_();
+      this.shadowRoot.replaceChildren();
+      this.built_ = false;
+    }
+    if (this.isConnected) this.build_();
+  }
+
+  set hass(hass) {
+    const prev = this.hass_;
+    this.hass_ = hass;
+    if (!this.config) return;
+    if (!this.built_) {
+      this.build_();
+      return;
+    }
+    if (entitiesChanged(prev, hass, this.watched())) this.paint();
+  }
+
+  get hass() {
+    return this.hass_;
+  }
+
+  connectedCallback() {
+    if (this.config && !this.built_) this.build_();
+  }
+
+  disconnectedCallback() {
+    this.destroy_();
+  }
+
+  /* ------------------------------------------------------- subclass API */
+
+  /** Check and normalise the config. Throw a readable message when it is wrong. */
+  validate(config) {
+    return config;
+  }
+
+  /** Entity ids whose changes should repaint this card. */
+  watched() {
+    return this.config?.entity ? [this.config.entity] : [];
+  }
+
+  /** HTML for the shadow root. Built once per config. */
+  template() {
+    return "";
+  }
+
+  /** Wire listeners onto the freshly built DOM. Push teardowns onto `this.teardown_`. */
+  wire() {}
+
+  /** Write current values into the built DOM. Runs on every relevant change. */
+  paint() {}
+
+  /* ------------------------------------------------------------ internals */
+
+  build_() {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = this.template();
+    this.shadowRoot.appendChild(tpl.content);
+    this.built_ = true;
+    this.wire();
+    if (this.hass_) this.paint();
+  }
+
+  destroy_() {
+    for (const fn of this.teardown_) {
+      try {
+        fn();
+      } catch {
+        // A listener that is already gone is not worth breaking a repaint over.
+      }
+    }
+    this.teardown_ = [];
+  }
+
+  $(sel) {
+    return this.shadowRoot.querySelector(sel);
+  }
+
+  $$(sel) {
+    return [...this.shadowRoot.querySelectorAll(sel)];
+  }
+
+  /** Set text only when it differs -- a no-op write still costs a layout pass. */
+  text(sel, value) {
+    const el = typeof sel === "string" ? this.$(sel) : sel;
+    if (el && el.textContent !== String(value)) el.textContent = value;
+  }
+
+  /** How many rows this card takes in a masonry column. */
+  getCardSize() {
+    return 1;
+  }
+}
+
+/**
+ * Register a card and tell the picker about it.
+ *
+ * Guarded against a double load: HACS and a manual resource entry pointing at
+ * the same file is a normal thing to happen once, and it should not take the
+ * whole dashboard down with "already defined".
+ */
+export function registerCard(tag, cls, { name, description, preview = true } = {}) {
+  if (customElements.get(tag)) return;
+  customElements.define(tag, cls);
+
+  window.customCards = window.customCards ?? [];
+  window.customCards.push({
+    type: tag,
+    name: name ?? tag,
+    description: description ?? "",
+    preview,
+    documentationURL: "https://github.com/Sven2410/domotiapp-cards",
+  });
+}
+
+/** Register an editor element. Same double-load guard. */
+export function registerEditor(tag, cls) {
+  if (!customElements.get(tag)) customElements.define(tag, cls);
+}

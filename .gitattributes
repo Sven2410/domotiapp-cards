@@ -1,0 +1,7 @@
+# Houd alles LF in de repository. Windows checkt lokaal uit zoals het wil, maar
+# wat er in de zip-release belandt is dan overal hetzelfde -- inclusief de
+# shell-stappen in de workflow, die op CRLF stukgaan.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary

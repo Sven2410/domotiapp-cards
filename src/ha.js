@@ -1,0 +1,384 @@
+/**
+ * The thin layer between a card and Home Assistant.
+ *
+ * Everything a card needs to know about hass lives here: reading a state,
+ * deciding whether a repaint is warranted, running the action a config asked
+ * for, and turning values into Dutch the customer would use. Cards stay about
+ * layout; this file stays about Home Assistant.
+ */
+
+/* ------------------------------------------------------------------ state */
+
+export const domainOf = (entityId) => String(entityId ?? "").split(".")[0];
+
+/** The state object, or null. Never throws on a missing entity. */
+export const stateOf = (hass, entityId) =>
+  (entityId && hass?.states?.[entityId]) || null;
+
+export const attrsOf = (hass, entityId) => stateOf(hass, entityId)?.attributes ?? {};
+
+/** The name to show: what the config said, else the entity's own. */
+export function nameOf(hass, entityId, configured) {
+  if (configured) return configured;
+  const a = attrsOf(hass, entityId);
+  return a.friendly_name || entityId || "";
+}
+
+export const isUnavailable = (st) =>
+  !st || st.state === "unavailable" || st.state === "unknown";
+
+/**
+ * Domains that have nothing to remember between presses.
+ *
+ * A scene, a script or a button sits at `unknown` until it is first run, and
+ * that is not a fault -- it is the normal resting state. Treating it as one is
+ * why a freshly added scene button greys itself out and says "Niet bereikbaar"
+ * on a perfectly healthy system.
+ */
+const STATELESS = new Set(["scene", "script", "input_button", "button", "event"]);
+
+export const isStateless = (entityId) => STATELESS.has(domainOf(entityId));
+
+/** Genuinely broken, as opposed to merely never used. */
+export function isDead(st) {
+  if (!st) return true;
+  if (st.state === "unavailable") return true;
+  if (st.state === "unknown") return !isStateless(st.entity_id);
+  return false;
+}
+
+/**
+ * Is this entity "on" in the way a human means it?
+ *
+ * Covers say `open`, alarms say `armed_*`, and a climate is on unless it is
+ * `off`. Treating only the literal string "on" as on is the classic reason a
+ * card looks dead while the device is clearly running.
+ */
+export function isOn(st) {
+  if (!st) return false;
+  const s = st.state;
+  if (s === "unavailable" || s === "unknown") return false;
+  switch (domainOf(st.entity_id)) {
+    case "cover":
+      return s === "open" || s === "opening";
+    case "alarm_control_panel":
+      return s.startsWith("armed") || s === "triggered" || s === "arming";
+    case "climate":
+    case "water_heater":
+    case "humidifier":
+      return s !== "off";
+    case "person":
+    case "device_tracker":
+      return s === "home";
+    case "media_player":
+      return s !== "off" && s !== "idle" && s !== "standby";
+    default:
+      return s === "on" || s === "playing" || s === "active" || s === "heat";
+  }
+}
+
+/**
+ * Has anything this card draws actually changed?
+ *
+ * Home Assistant hands a card a fresh hass object on every state change in the
+ * whole house -- thousands of them here. Repainting on each one is what makes a
+ * dashboard feel heavy on a wall tablet. State objects are replaced rather than
+ * mutated, so identity comparison is both correct and cheap.
+ */
+export function entitiesChanged(oldHass, newHass, ids) {
+  if (!oldHass) return true;
+  if (oldHass.themes !== newHass.themes || oldHass.language !== newHass.language) return true;
+  for (const id of ids) {
+    if (!id) continue;
+    if (oldHass.states?.[id] !== newHass.states?.[id]) return true;
+  }
+  return false;
+}
+
+/* ----------------------------------------------------------------- events */
+
+export function fireEvent(node, type, detail = {}) {
+  node.dispatchEvent(
+    new CustomEvent(type, { detail, bubbles: true, composed: true, cancelable: false })
+  );
+}
+
+export const moreInfo = (node, entityId) =>
+  fireEvent(node, "hass-more-info", { entityId });
+
+/* ---------------------------------------------------------------- actions */
+
+/** What a tap does when the config says nothing, per domain. */
+export function defaultTapAction(entityId) {
+  switch (domainOf(entityId)) {
+    case "light":
+    case "switch":
+    case "fan":
+    case "input_boolean":
+    case "automation":
+    case "siren":
+      return { action: "toggle" };
+    case "script":
+    case "scene":
+    case "input_button":
+    case "button":
+      return { action: "toggle" };
+    default:
+      return { action: "more-info" };
+  }
+}
+
+/** The service that toggles a thing, per domain. */
+function toggleCall(entityId) {
+  const domain = domainOf(entityId);
+  switch (domain) {
+    case "scene":
+      return ["scene", "turn_on"];
+    case "script":
+      return ["script", "turn_on"];
+    case "input_button":
+      return ["input_button", "press"];
+    case "button":
+      return ["button", "press"];
+    case "lock":
+      return ["lock", "open"];
+    case "cover":
+      return ["cover", "toggle"];
+    case "media_player":
+      return ["media_player", "media_play_pause"];
+    default:
+      return ["homeassistant", "toggle"];
+  }
+}
+
+/**
+ * Run whatever the config asked for.
+ *
+ * The shape is Home Assistant's own action config, so anything a customer has
+ * already written for a tile or a bubble-card keeps working when they move it
+ * onto one of these. `perform-action` is the current name and `call-service`
+ * the old one; both are accepted, because dashboards outlive renames.
+ */
+export function runAction(node, hass, config, action) {
+  if (!action || action.action === "none") return;
+
+  switch (action.action) {
+    case "more-info":
+      moreInfo(node, action.entity || config.entity);
+      break;
+
+    case "toggle": {
+      const entity = action.entity || config.entity;
+      if (!entity) break;
+      const [domain, service] = toggleCall(entity);
+      hass.callService(domain, service, { entity_id: entity });
+      break;
+    }
+
+    case "perform-action":
+    case "call-service": {
+      const target = action.perform_action || action.service;
+      if (!target) break;
+      const [domain, service] = target.split(".");
+      hass.callService(domain, service, action.data ?? action.service_data ?? {}, action.target);
+      break;
+    }
+
+    case "navigate":
+      if (!action.navigation_path) break;
+      // A path starting with # is a bubble-card pop-up on the current view.
+      // history.pushState keeps it a same-view navigation instead of a reload.
+      history.pushState(null, "", action.navigation_path);
+      fireEvent(window, "location-changed", { replace: false });
+      break;
+
+    case "url":
+      if (action.url_path) window.open(action.url_path, action.target ?? "_blank");
+      break;
+
+    case "assist":
+      fireEvent(node, "show-dialog", {
+        dialogTag: "ha-voice-command-dialog",
+        dialogImport: () => {},
+        dialogParams: {},
+      });
+      break;
+
+    case "fire-dom-event":
+      fireEvent(node, "ll-custom", action);
+      break;
+
+    default:
+      break;
+  }
+}
+
+/**
+ * Wire tap / hold / double-tap onto an element.
+ *
+ * Written against pointer events rather than click so a hold does not also fire
+ * a tap, and so a drag that starts on a button (scrolling a row of them with a
+ * finger) is not read as a press. 500ms is Home Assistant's own hold threshold;
+ * matching it means muscle memory carries over.
+ *
+ * Returns a teardown function.
+ */
+export function bindActions(el, { onTap, onHold, onDouble }) {
+  let timer = null;
+  let held = false;
+  let lastTap = 0;
+  let startX = 0;
+  let startY = 0;
+
+  const clear = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+
+  const down = (e) => {
+    if (e.button != null && e.button !== 0) return;
+    held = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    clear();
+    if (onHold) {
+      timer = setTimeout(() => {
+        held = true;
+        // A hold that lands should feel like it landed, on a device that can.
+        navigator.vibrate?.(18);
+        onHold();
+      }, 500);
+    }
+  };
+
+  const up = (e) => {
+    clear();
+    if (held) return;
+    // A finger that travelled was scrolling, not pressing.
+    if (Math.hypot(e.clientX - startX, e.clientY - startY) > 12) return;
+
+    if (onDouble) {
+      const now = Date.now();
+      if (now - lastTap < 280) {
+        lastTap = 0;
+        onDouble();
+        return;
+      }
+      lastTap = now;
+      setTimeout(() => {
+        if (lastTap && Date.now() - lastTap >= 280) {
+          lastTap = 0;
+          onTap?.();
+        }
+      }, 290);
+      return;
+    }
+    onTap?.();
+  };
+
+  const cancel = () => {
+    clear();
+    held = false;
+  };
+
+  const key = (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    onTap?.();
+  };
+
+  el.addEventListener("pointerdown", down);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", cancel);
+  el.addEventListener("pointerleave", cancel);
+  el.addEventListener("keydown", key);
+  // Long-press on a touch screen otherwise opens the browser's own menu.
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  return () => {
+    clear();
+    el.removeEventListener("pointerdown", down);
+    el.removeEventListener("pointerup", up);
+    el.removeEventListener("pointercancel", cancel);
+    el.removeEventListener("pointerleave", cancel);
+    el.removeEventListener("keydown", key);
+  };
+}
+
+/* -------------------------------------------------------------- formatting */
+
+/** Home Assistant's own translation of a state, so cards speak the UI's language. */
+export function localizeState(hass, st) {
+  if (!st) return "";
+  const domain = domainOf(st.entity_id);
+  const dc = st.attributes.device_class;
+  return (
+    hass.formatEntityState?.(st) ??
+    hass.localize?.(`component.${domain}.entity_component.${dc ?? "_"}.state.${st.state}`) ??
+    hass.localize?.(`component.${domain}.entity_component._.state.${st.state}`) ??
+    st.state
+  );
+}
+
+/** A number the way this Home Assistant would print it. */
+export function fmtNumber(hass, value, digits) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "--";
+  return n.toLocaleString(hass?.locale?.language ?? "nl", {
+    minimumFractionDigits: digits ?? 0,
+    maximumFractionDigits: digits ?? 0,
+  });
+}
+
+const DAYS = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
+const MONTHS = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+
+/** Midnight today, so day arithmetic is not thrown off by the clock. */
+export const startOfDay = (d = new Date()) =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+export const daysBetween = (from, to) =>
+  Math.round((startOfDay(to) - startOfDay(from)) / 86400000);
+
+/**
+ * Parse the date shapes an integration might hand us.
+ *
+ * Dutch waste integrations commonly emit `18-08-2026`, which `Date.parse` reads
+ * as an American month-day and quietly returns either the wrong day or NaN.
+ * That is worth handling explicitly rather than discovering it in December.
+ */
+export function parseDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(+value) ? null : value;
+  const s = String(value).trim();
+
+  let m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+
+  const d = new Date(s);
+  return Number.isNaN(+d) ? null : d;
+}
+
+/**
+ * How a person would say when this is: "vandaag", "morgen", "dinsdag",
+ * and a plain date once it is far enough out that a weekday stops helping.
+ */
+export function relativeDay(date, now = new Date()) {
+  if (!date) return "";
+  const d = daysBetween(now, date);
+  if (d < 0) return `${Math.abs(d)} dagen geleden`;
+  if (d === 0) return "vandaag";
+  if (d === 1) return "morgen";
+  if (d === 2) return "overmorgen";
+  if (d <= 6) return DAYS[date.getDay()];
+  return `${DAYS[date.getDay()].slice(0, 2)} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
+}
+
+export const shortDate = (date) =>
+  date ? `${date.getDate()} ${MONTHS[date.getMonth()]}` : "";
+
+/** "1 dag" / "3 dagen" -- the singular is not optional in Dutch. */
+export const dayCount = (n) => (Math.abs(n) === 1 ? "1 dag" : `${n} dagen`);

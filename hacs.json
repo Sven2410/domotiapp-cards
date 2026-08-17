@@ -1,0 +1,7 @@
+{
+  "name": "DomotiApp Cards",
+  "homeassistant": "2024.11.0",
+  "render_readme": true,
+  "filename": "domotiapp-cards.zip",
+  "zip_release": true
+}

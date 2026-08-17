@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DomotiApp Cards &mdash; werkbank</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 28px 20px 80px;
+    background: #0c0c0a; color: #e8e4de;
+    font-family: Roboto, "Noto Sans", "Segoe UI", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 300; letter-spacing: -.02em; margin: 0 0 4px; }
+  p.lead { margin: 0 0 26px; font-size: 13px; color: rgba(232,228,222,.62); }
+  .cols { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  h2 {
+    font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: rgba(232,228,222,.38); margin: 10px 0 0;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  #log {
+    position: fixed; inset: auto 0 0 0; max-height: 30vh; overflow: auto;
+    background: rgba(18,18,15,.96); border-top: 1px solid rgba(232,228,222,.2);
+    font: 12px/1.5 ui-monospace, monospace; padding: 10px 16px;
+  }
+  #log b { color: #198fd9; }
+  #log .err { color: #d03b3b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DomotiApp Cards &mdash; werkbank</h1>
+  <p class="lead">
+    Alle kaarten met een nagemaakte <code>hass</code>. Service-aanroepen gaan naar het logboek
+    onderaan in plaats van naar een echt huis, zodat je kunt klikken en slepen zonder dat er
+    ergens een rolluik beweegt.
+  </p>
+  <div class="cols" id="cols"></div>
+</div>
+<div id="log"><b>Service-aanroepen</b><div id="loglines"></div></div>
+
+<script type="module">
+import "../domotiapp-cards.js";
+
+/* ---------------------------------------------------------------- mock hass */
+
+const now = new Date();
+const iso = (h, m) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m).toISOString();
+const dPlus = (n) => {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
+  const p = (x) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
+};
+
+const S = (entity_id, state, attributes = {}) => [entity_id, { entity_id, state, attributes }];
+
+const states = Object.fromEntries([
+  S("weather.buienradar", "cloudy", {
+    friendly_name: "Buienradar", temperature: 18, humidity: 73,
+    wind_speed: 13.3, wind_bearing: 307, precipitation: 0, uv_index: 3.2,
+  }),
+  S("sun.sun", "above_horizon", { next_setting: iso(20, 55), next_rising: iso(6, 24) }),
+
+  S("person.sven", "home", { friendly_name: "Sven" }),
+  S("person.lieke", "home", { friendly_name: "Lieke" }),
+  S("person.rinette", "not_home", { friendly_name: "Rinette" }),
+  S("person.peter", "Werk", { friendly_name: "Peter" }),
+  S("person.bertus", "home", { friendly_name: "Bertus" }),
+  S("person.dies", "unknown", { friendly_name: "Dies" }),
+  S("sensor.sven_batt", "84", { friendly_name: "Batterij Sven" }),
+
+  // Dimbaar, met kleur.
+  S("light.ledstrip_sven", "on", {
+    friendly_name: "Ledstrip Sven", brightness: 168,
+    supported_color_modes: ["rgb"], rgb_color: [255, 138, 60],
+  }),
+  // Dimbaar, uit.
+  S("light.spots_sven", "off", {
+    friendly_name: "Spots Sven", supported_color_modes: ["brightness"],
+  }),
+  // Alleen aan/uit -- moet een tuimelaar krijgen, geen schuif.
+  S("light.groep_buiten", "on", {
+    friendly_name: "Groep buiten", supported_color_modes: ["onoff"],
+  }),
+  S("light.kapot", "unavailable", { friendly_name: "Bureaulamp" }),
+
+  // Zoals Svens rolluiken: open/stop/dicht, geen terugkoppeling.
+  S("cover.wk_achter", "unknown", { friendly_name: "WK Achter", device_class: "shutter", supported_features: 11 }),
+  S("cover.keuken_voor", "unknown", { friendly_name: "Keuken Voor", device_class: "shutter", supported_features: 11 }),
+  S("cover.zonnescherm_woonkamer", "unknown", { friendly_name: "Zonnescherm woonkamer", device_class: "awning", supported_features: 11 }),
+  // Eentje die wel terugmeldt, om te zien dat de schuif dan vanzelf verschijnt.
+  S("cover.garagedeur", "open", { friendly_name: "Garagedeur", supported_features: 15, current_position: 65 }),
+
+  S("sensor.mijnafvalwijzer_pmd", dPlus(1), { friendly_name: "Afvalbeheer Mijnafvalwijzer PMD" }),
+  S("sensor.mijnafvalwijzer_gft", dPlus(3), { friendly_name: "Afvalbeheer Mijnafvalwijzer GFT" }),
+  S("sensor.mijnafvalwijzer_papier", dPlus(16), { friendly_name: "Afvalbeheer Mijnafvalwijzer Papier" }),
+  S("sensor.mijnafvalwijzer_restafval", dPlus(23), { friendly_name: "Afvalbeheer Mijnafvalwijzer Restafval" }),
+
+  S("input_boolean.slapen", "off", { friendly_name: "Slapen" }),
+  S("scene.radio", "unknown", { friendly_name: "Radio" }),
+  S("alarm_control_panel.alarm", "disarmed", { friendly_name: "Alarm" }),
+  S("climate.woonkamer", "heat", { friendly_name: "Woonkamer", current_temperature: 22.5, temperature: 19.5 }),
+]);
+
+const log = (msg, cls = "") => {
+  const el = document.createElement("div");
+  el.className = cls;
+  el.textContent = `${new Date().toLocaleTimeString("nl")}  ${msg}`;
+  document.getElementById("loglines").prepend(el);
+};
+
+const hass = {
+  states,
+  language: "nl",
+  locale: { language: "nl" },
+  user: { name: "Sven" },
+  config: { unit_system: { wind_speed: "km/h" } },
+  themes: {},
+  callService(domain, service, data) {
+    log(`${domain}.${service}  ${JSON.stringify(data)}`);
+    // Reflect the call back into the mock, so the card visibly responds.
+    const ids = [].concat(data?.entity_id ?? []);
+    for (const id of ids) {
+      const st = states[id];
+      if (!st) continue;
+      const next = { ...st, attributes: { ...st.attributes } };
+      if (service === "toggle") next.state = st.state === "on" ? "off" : "on";
+      if (service === "turn_on") next.state = "on";
+      if (service === "turn_off") next.state = "off";
+      if (data.brightness_pct != null) {
+        next.state = "on";
+        next.attributes.brightness = Math.round((data.brightness_pct / 100) * 255);
+      }
+      if (service === "open_cover") next.state = "open";
+      if (service === "close_cover") next.state = "closed";
+      if (service === "set_cover_position") next.attributes.current_position = data.position;
+      states[id] = next;
+    }
+    push();
+  },
+  formatEntityState: (st) =>
+    ({ on: "Aan", off: "Uit", open: "Open", closed: "Dicht", unknown: "Onbekend",
+       unavailable: "Niet bereikbaar", home: "Thuis", not_home: "Afwezig",
+       disarmed: "Uitgeschakeld", heat: "Verwarmen", cloudy: "Bewolkt" }[st.state] ?? st.state),
+  localize: () => undefined,
+};
+
+/* --------------------------------------------------------------- build page */
+
+const cards = [];
+
+/**
+ * A fresh snapshot, exactly as Home Assistant hands one out.
+ *
+ * Never pass the live `states` object to a card. HA replaces state objects
+ * rather than mutating them, and every card in the family leans on that to
+ * decide whether a repaint is warranted. Handing over the live object makes the
+ * card's previous hass and its new hass the same thing, so nothing ever looks
+ * changed and the first interaction appears to do nothing.
+ */
+const snapshot = () => ({ ...hass, states: { ...states } });
+
+function make(config, wrapClass) {
+  const el = document.createElement(config.type.replace(/^custom:/, ""));
+  try {
+    el.setConfig(config);
+  } catch (e) {
+    log(`setConfig faalde voor ${config.type}: ${e.message}`, "err");
+    const p = document.createElement("div");
+    p.className = "err";
+    p.textContent = `${config.type}: ${e.message}`;
+    return p;
+  }
+  el.hass = snapshot();
+  cards.push(el);
+  if (!wrapClass) return el;
+  const w = document.createElement("div");
+  w.className = wrapClass;
+  w.appendChild(el);
+  return w;
+}
+
+const push = () => {
+  const next = snapshot();
+  for (const c of cards) c.hass = next;
+};
+
+const COLUMNS = [
+  ["Header en secties", [
+    { type: "custom:domotiapp-header-card", weather: "weather.buienradar", sun: "sun.sun", person: "person.sven" },
+    { type: "custom:domotiapp-separator-card", name: "Favorieten", icon: "star", tone: "accent" },
+    { type: "custom:domotiapp-person-card", persons: ["person.sven","person.lieke","person.rinette","person.peter","person.bertus","person.dies"], show_summary: true },
+    { type: "custom:domotiapp-separator-card", name: "Woning", icon: "house", tone: "house", secondary_entity: "climate.woonkamer" },
+  ]],
+  ["Knoppen", [
+    { type: "custom:domotiapp-button-card", entity: "input_boolean.slapen", icon: "moon", tone: "house" },
+    { type: "custom:domotiapp-button-card", entity: "scene.radio", icon: "radio", tone: "pink" },
+    { type: "custom:domotiapp-button-card", entity: "alarm_control_panel.alarm", icon: "shield", tone: "good" },
+    { type: "custom:domotiapp-button-card", name: "Begane grond", icon: "floorB", layout: "row",
+      tap_action: { action: "navigate", navigation_path: "#beganegrond" } },
+    { type: "custom:domotiapp-button-card", entity: "light.kapot", icon: "bulb" },
+  ]],
+  ["Verlichting en rolluiken", [
+    { type: "custom:domotiapp-light-card", title: "Slaapkamer Sven",
+      lights: ["light.ledstrip_sven", "light.spots_sven", "light.groep_buiten", "light.kapot"] },
+    { type: "custom:domotiapp-cover-card", title: "Woonkamer & keuken",
+      covers: ["cover.wk_achter", "cover.keuken_voor", "cover.zonnescherm_woonkamer", "cover.garagedeur"],
+      group: true },
+  ]],
+  ["Afval", [
+    { type: "custom:domotiapp-waste-card", title: "Afvalkalender",
+      sensors: ["sensor.mijnafvalwijzer_pmd","sensor.mijnafvalwijzer_gft","sensor.mijnafvalwijzer_papier","sensor.mijnafvalwijzer_restafval"] },
+    { type: "custom:domotiapp-separator-card", name: "Tegels", icon: "grid", tone: "teal" },
+  ]],
+];
+
+const cols = document.getElementById("cols");
+for (const [title, configs] of COLUMNS) {
+  const col = document.createElement("div");
+  col.className = "col";
+  const h = document.createElement("h2");
+  h.textContent = title;
+  col.appendChild(h);
+  for (const cfg of configs) col.appendChild(make(cfg));
+  cols.appendChild(col);
+}
+
+// Tegels apart, zodat de tegelvorm naast elkaar staat.
+const tiles = document.createElement("div");
+tiles.className = "grid3";
+for (const t of [
+  { name: "Woning", icon: "house", tone: "house" },
+  { name: "Rolluiken", icon: "shutter", tone: "solar" },
+  { name: "Afval", icon: "binWheeled", tone: "warn" },
+]) {
+  tiles.appendChild(make({ type: "custom:domotiapp-button-card", layout: "tile", ...t,
+    tap_action: { action: "navigate", navigation_path: "#x" } }));
+}
+cols.lastElementChild.appendChild(tiles);
+
+const compact = document.createElement("div");
+compact.className = "grid2";
+for (const t of [
+  { entity: "input_boolean.slapen", name: "Slapen", icon: "moon", tone: "house", layout: "compact" },
+  { entity: "scene.radio", name: "Radio", icon: "radio", tone: "pink", layout: "compact" },
+]) compact.appendChild(make({ type: "custom:domotiapp-button-card", ...t }));
+cols.lastElementChild.appendChild(compact);
+
+window.addEventListener("error", (e) => log(`FOUT: ${e.message}`, "err"));
+window.addEventListener("unhandledrejection", (e) => log(`FOUT: ${e.reason}`, "err"));
+log("werkbank geladen");
+</script>
+</body>
+</html>
