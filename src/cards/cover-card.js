@@ -16,10 +16,10 @@
  * position is a real and awkward combination.
  */
 
-import { DacCard, registerCard, registerEditor, toneValue } from "../base.js?v=0.1.0";
-import { DacEditor, sel, row, section } from "../editor/base.js?v=0.1.0";
-import { icons, resolve, defaultIcon } from "../icons.js?v=0.1.0";
-import { attrsOf, bindActions, isUnavailable, moreInfo, nameOf, stateOf } from "../ha.js?v=0.1.0";
+import { DacCard, registerCard, registerEditor, toneValue, INCOMPLETE } from "../base.js";
+import { DacEditor, sel, row, section } from "../editor/base.js";
+import { icons, resolve, defaultIcon } from "../icons.js";
+import { attrsOf, bindActions, isUnavailable, moreInfo, nameOf, stateOf } from "../ha.js";
 
 const F = { OPEN: 1, CLOSE: 2, SET_POSITION: 4, STOP: 8, SET_TILT: 128 };
 const can = (st, bit) => Boolean((st?.attributes?.supported_features ?? 0) & bit);
@@ -102,7 +102,7 @@ class CoverCard extends DacCard {
 
   validate(config) {
     const list = config.covers ?? config.entities ?? (config.entity ? [config.entity] : []);
-    if (!list.length) throw new Error("domotiapp-cover-card: kies minstens één rolluik.");
+    if (!list.length) return { ...config, [INCOMPLETE]: "Kies minstens één rolluik of zonnescherm." };
     return {
       group: list.length > 1,
       ...config,

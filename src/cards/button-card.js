@@ -14,9 +14,9 @@
  * it is how the room tiles and the floor buttons on a home view are built.
  */
 
-import { DacCard, registerCard, registerEditor, toneValue, TONES } from "../base.js?v=0.1.0";
-import { DacEditor, sel, row, section, LABELS } from "../editor/base.js?v=0.1.0";
-import { resolve, defaultIcon } from "../icons.js?v=0.1.0";
+import { DacCard, registerCard, registerEditor, toneValue, TONES } from "../base.js";
+import { DacEditor, sel, row, section, LABELS } from "../editor/base.js";
+import { resolve, defaultIcon } from "../icons.js";
 import {
   attrsOf,
   bindActions,
@@ -29,7 +29,7 @@ import {
   nameOf,
   runAction,
   stateOf,
-} from "../ha.js?v=0.1.0";
+} from "../ha.js";
 
 class ButtonCard extends DacCard {
   static css = /* css */ `

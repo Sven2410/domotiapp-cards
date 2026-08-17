@@ -8,8 +8,8 @@
  * row of buttons -- every time any entity in the house changed.
  */
 
-import { baseCss, sheet, tokens } from "./theme.js?v=0.1.0";
-import { entitiesChanged } from "./ha.js?v=0.1.0";
+import { baseCss, sheet, tokens } from "./theme.js";
+import { entitiesChanged } from "./ha.js";
 
 const hostCss = /* css */ `
   :host {
@@ -64,6 +64,25 @@ export const TONE_LABELS = {
 export const toneValue = (tone, fallback = "accent") =>
   TONES[tone] ?? (tone && /[#(]|^var/.test(tone) ? tone : TONES[fallback]);
 
+/**
+ * Marks a config that is valid YAML but not yet pointed at anything.
+ *
+ * A Symbol rather than a string key, so it can never collide with a setting and
+ * never ends up written back into somebody's dashboard YAML.
+ */
+export const INCOMPLETE = Symbol("incomplete");
+
+/** Say what is missing, in the card's own shape. */
+const placeholder = (message) => `
+  <div class="needs">
+    <span class="mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.6"/>
+      <path d="M9.6 9.6a2.4 2.4 0 1 1 3.2 2.3c-.5.2-.8.7-.8 1.2v.6M12 16.6v.1"/>
+    </svg></span>
+    <span><b>Nog niets gekozen</b><span>${message}</span></span>
+  </div>`;
+
 export class DacCard extends HTMLElement {
   /** Component-specific CSS, overridden by subclasses. */
   static css = "";
@@ -107,6 +126,9 @@ export class DacCard extends HTMLElement {
       this.build_();
       return;
     }
+    // Nothing to repaint, and `watched()` would be reaching into a config that
+    // has no entities in it yet.
+    if (this.config[INCOMPLETE]) return;
     if (entitiesChanged(prev, hass, this.watched())) this.paint();
   }
 
@@ -149,9 +171,16 @@ export class DacCard extends HTMLElement {
 
   build_() {
     const tpl = document.createElement("template");
-    tpl.innerHTML = this.template();
+    // A card that has been added but not yet pointed at anything explains
+    // itself instead of throwing. `setConfig` runs on every keystroke in the
+    // editor, and it runs once with an empty stub the moment a card is picked
+    // from the list -- throwing there replaces the preview with "Ongeldige
+    // configuratie", which names neither the card nor what is missing.
+    const missing = this.config?.[INCOMPLETE];
+    tpl.innerHTML = missing ? placeholder(missing) : this.template();
     this.shadowRoot.appendChild(tpl.content);
     this.built_ = true;
+    if (missing) return;
     this.wire();
     if (this.hass_) this.paint();
   }

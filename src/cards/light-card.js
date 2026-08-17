@@ -15,10 +15,10 @@
  * under the drag.
  */
 
-import { DacCard, registerCard, registerEditor, toneValue, TONES } from "../base.js?v=0.1.0";
-import { DacEditor, sel, row, section, LABELS } from "../editor/base.js?v=0.1.0";
-import { resolve } from "../icons.js?v=0.1.0";
-import { bindActions, isDead, moreInfo, nameOf, stateOf } from "../ha.js?v=0.1.0";
+import { DacCard, registerCard, registerEditor, toneValue, TONES, INCOMPLETE } from "../base.js";
+import { DacEditor, sel, row, section, LABELS } from "../editor/base.js";
+import { resolve } from "../icons.js";
+import { bindActions, isDead, moreInfo, nameOf, stateOf } from "../ha.js";
 
 const DIMMABLE = new Set(["brightness", "color_temp", "hs", "rgb", "rgbw", "rgbww", "xy", "white"]);
 
@@ -128,9 +128,7 @@ class LightCard extends DacCard {
 
   validate(config) {
     const list = config.lights ?? config.entities ?? (config.entity ? [config.entity] : []);
-    if (!list.length) {
-      throw new Error("domotiapp-light-card: kies minstens één lamp.");
-    }
+    if (!list.length) return { ...config, [INCOMPLETE]: "Kies minstens één lamp." };
     return {
       ...config,
       lights: list.map((l) => (typeof l === "string" ? { entity: l } : l)),

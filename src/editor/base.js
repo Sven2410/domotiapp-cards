@@ -17,8 +17,8 @@
  * system one card at a time).
  */
 
-import "./icon-picker.js?v=0.1.0";
-import "./tone-picker.js?v=0.1.0";
+import "./icon-picker.js";
+import "./tone-picker.js";
 
 /** Selector shorthands, so a card's schema reads as a list of fields. */
 export const sel = {

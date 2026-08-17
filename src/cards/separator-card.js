@@ -10,10 +10,10 @@
  * a divider between two equal things, and this is a heading for what follows.
  */
 
-import { DacCard, registerCard, registerEditor, toneValue } from "../base.js?v=0.1.0";
-import { DacEditor, sel, LABELS } from "../editor/base.js?v=0.1.0";
-import { resolve } from "../icons.js?v=0.1.0";
-import { localizeState, stateOf } from "../ha.js?v=0.1.0";
+import { DacCard, registerCard, registerEditor, toneValue } from "../base.js";
+import { DacEditor, sel, LABELS } from "../editor/base.js";
+import { resolve } from "../icons.js";
+import { localizeState, stateOf } from "../ha.js";
 
 class SeparatorCard extends DacCard {
   static css = /* css */ `

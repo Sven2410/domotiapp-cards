@@ -1,0 +1,14 @@
+{
+  "name": "domotiapp-cards",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Eigen Lovelace-kaartenfamilie voor Home Assistant",
+  "type": "module",
+  "scripts": {
+    "build": "node dev/build.mjs",
+    "watch": "node dev/build.mjs --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

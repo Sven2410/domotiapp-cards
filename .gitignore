@@ -2,4 +2,8 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
-domotiapp-cards.zip
+
+# dist/ wordt bewust wél meegecommit: HACS serveert het gebouwde bestand,
+# en zonder release moet een handmatige installatie er ook bij kunnen.
+dist/.version
+dist/*.map

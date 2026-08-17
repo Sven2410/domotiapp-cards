@@ -8,9 +8,9 @@
  * further away on purpose.
  */
 
-import { icons, resolve } from "../icons.js?v=0.1.0";
-import { sheet } from "../theme.js?v=0.1.0";
-import { tokens } from "../theme.js?v=0.1.0";
+import { icons, resolve } from "../icons.js";
+import { sheet } from "../theme.js";
+import { tokens } from "../theme.js";
 
 /**
  * Grouped so the grid can be scanned rather than read.

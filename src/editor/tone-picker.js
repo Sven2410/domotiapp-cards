@@ -13,9 +13,9 @@
  * colour selector.
  */
 
-import { TONES, TONE_LABELS } from "../base.js?v=0.1.0";
-import { icons } from "../icons.js?v=0.1.0";
-import { sheet, tokens } from "../theme.js?v=0.1.0";
+import { TONES, TONE_LABELS } from "../base.js";
+import { icons } from "../icons.js";
+import { sheet, tokens } from "../theme.js";
 
 const IDENTITY = ["accent", "solar", "house", "water", "magenta", "pink", "teal", "lit", "neutral"];
 const STATUS = ["good", "warn", "bad"];

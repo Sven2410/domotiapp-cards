@@ -122,6 +122,27 @@ export const baseCss = /* css */ `
 
   .unavailable { opacity: 0.42; }
 
+  /* Shown when a card has been added but not yet pointed at anything.
+     A card that throws instead takes the whole preview down with "Ongeldige
+     configuratie", which tells the installer nothing about what is missing. */
+  .needs {
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px 18px;
+    background: var(--dac-surface);
+    border: 1px dashed var(--dac-border-hi);
+    border-radius: var(--dac-radius);
+  }
+  .needs .mark {
+    width: 40px; height: 40px; flex: 0 0 auto;
+    display: grid; place-items: center; border-radius: var(--dac-radius-sm);
+    color: var(--dac-accent-hi);
+    background: color-mix(in srgb, var(--dac-accent-hi) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--dac-accent-hi) 32%, transparent);
+  }
+  .needs .mark .icon { width: 20px; height: 20px; }
+  .needs b { display: block; font-size: 13.5px; font-weight: 600; }
+  .needs span { display: block; margin-top: 2px; font-size: 12.5px; color: var(--dac-ink-2); }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.001ms !important;

@@ -1,10 +1,8 @@
 name: Release
 
-# HACS haalt bij een Lovelace-kaart normaal één los bestand op. Dit pakket is
-# bewust zonder buildstap en bestaat dus uit meerdere modules, en `src/` zou bij
-# zo'n download niet meekomen. Daarom `zip_release` in hacs.json, en daarom deze
-# workflow: hij plakt bij elke tag een zip aan de release waar het entry-bestand
-# én src/ in zitten.
+# HACS registreert voor een dashboardkaart precies één resource-URL, en dat is
+# `filename` uit hacs.json. Daarom hangt aan elke release het gebouwde
+# dist/domotiapp-cards.js -- één bestand, precies wat HACS verwacht.
 
 on:
   push:
@@ -13,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag om een release voor te maken, bijvoorbeeld v0.1.0"
+        description: "Tag om een release voor te maken, bijvoorbeeld v0.1.1"
         required: true
 
 permissions:
@@ -25,6 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Versie bepalen
         id: v
         run: |
@@ -34,31 +36,30 @@ jobs:
 
       - name: Controleren of de tag klopt met VERSION
         run: |
-          IN_FILE=$(grep -oP 'export const VERSION = "\K[^"]+' domotiapp-cards.js)
+          IN_FILE=$(grep -oP 'export const VERSION = "\K[^"]+' src/index.js)
           if [ "$IN_FILE" != "${{ steps.v.outputs.version }}" ]; then
-            echo "::error::Tag zegt ${{ steps.v.outputs.version }}, domotiapp-cards.js zegt $IN_FILE."
+            echo "::error::Tag zegt ${{ steps.v.outputs.version }}, src/index.js zegt $IN_FILE."
             echo "Draai eerst: node dev/bump.mjs ${{ steps.v.outputs.version }}"
             exit 1
           fi
 
-      - name: Controleren of elke import gestempeld is
-        # Een import zonder ?v= overleeft een update in de browsercache van de
-        # klant, en koppelt dan nieuwe code aan oude modules.
+      - name: Syntaxcheck op de bronnen
+        run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Bouwen
         run: |
-          if grep -rEn '(from|import) +"\.[^"]*\.js"' --include='*.js' . ; then
-            echo "::error::Bovenstaande imports missen ?v=. Draai node dev/bump.mjs"
+          npm ci || npm install
+          node dev/build.mjs
+
+      - name: Controleren of dist/ meegecommit is en klopt
+        # Een dist die achterloopt op src is erger dan geen dist: een handmatige
+        # installatie pakt hem wel, en draait dan stilletjes oude code.
+        run: |
+          if ! git diff --quiet -- dist/domotiapp-cards.js; then
+            echo "::error::dist/domotiapp-cards.js loopt achter op src/. Draai node dev/build.mjs en commit het resultaat."
+            git diff --stat -- dist/domotiapp-cards.js
             exit 1
           fi
-
-      - name: Syntaxcheck
-        run: |
-          find . -name '*.js' -not -path './.git/*' -print0 \
-            | xargs -0 -n1 node --check
-
-      - name: Zip bouwen
-        run: |
-          zip -r domotiapp-cards.zip \
-            domotiapp-cards.js src hacs.json README.md LICENSE
 
       - name: Release publiceren
         uses: softprops/action-gh-release@v2
@@ -66,4 +67,4 @@ jobs:
           tag_name: ${{ steps.v.outputs.tag }}
           name: ${{ steps.v.outputs.tag }}
           generate_release_notes: true
-          files: domotiapp-cards.zip
+          files: dist/domotiapp-cards.js

@@ -35,39 +35,56 @@ dus je hoeft geen YAML te schrijven om een dashboard op te bouwen.
 
 ### Handmatig
 
-Kopieer `domotiapp-cards.js` **en de map `src/`** naar
-`config/www/domotiapp-cards/`, en voeg toe onder
-**Instellingen → Dashboards → Bronnen**:
+Kopieer **alleen** `dist/domotiapp-cards.js` naar `config/www/`, en voeg toe
+onder **Instellingen → Dashboards → Bronnen**:
 
 ```
-/local/domotiapp-cards/domotiapp-cards.js     type: JavaScript Module
+/local/domotiapp-cards.js     type: JavaScript Module
 ```
 
 Ververs daarna hard (Ctrl+F5). In de console hoor je één regel te zien:
-`DOMOTIAPP-CARDS 0.1.0`. Zie je die niet, dan is de resource niet geladen.
+`DOMOTIAPP-CARDS 0.1.1`. Zie je die niet, dan is de resource niet geladen.
 
-### Waarom dit pakket een zip-release heeft
+---
 
-Er is geen buildstap: de browser haalt de losse modules zelf op, zodat wat er
-draait letterlijk hetzelfde is als wat er in de repository staat. Dat scheelt
-tijd als je op een wandtablet bij een klant moet zoeken waar iets misgaat.
+## Bouwen
 
-De prijs is dat HACS bij een dashboardkaart normaal gesproken één los bestand
-ophaalt — `src/` zou dan niet meekomen. Daarom staat `zip_release` in
-`hacs.json` en hangt er aan elke release een zip met alles erin. Dat is
-HACS-eigen functionaliteit, geen omweg.
-
-Om dezelfde reden draagt elke relatieve import een `?v=<versie>`. HACS ontcachet
-bij een update alleen het hoofdbestand; zonder die stempel krijgt een klant het
-nieuwe hoofdbestand gekoppeld aan oude modules uit zijn browsercache, en dat
-faalt op manieren die nergens op slaan. Versie bijwerken doe je met:
+De bronnen staan gesplitst in `src/`; wat Home Assistant laadt is één gebundeld
+bestand in `dist/`.
 
 ```bash
-node dev/bump.mjs 0.2.0
+npm install
+npm run build        # dist/domotiapp-cards.js
+npm run watch        # opnieuw bouwen terwijl je werkt
 ```
 
-Dat zet `VERSION` én alle imports in één keer goed. Daarna taggen; de workflow
-bouwt de zip en weigert als tag en `VERSION` niet overeenkomen.
+`dist/` wordt bewust meegecommit, zodat een handmatige installatie ook zonder
+release werkt. De workflow weigert een release als `dist/` achterloopt op `src/`.
+
+Versie bijwerken:
+
+```bash
+node dev/bump.mjs 0.2.0     # zet VERSION, package.json en bouwt opnieuw
+git commit -am "0.2.0" && git tag v0.2.0 && git push --tags
+```
+
+De workflow controleert dat de tag en `VERSION` overeenkomen, bouwt, en hangt
+het bestand aan de release.
+
+### Waarom er toch een buildstap is
+
+De eerste versie had er geen: de browser haalde de losse modules zelf op, zodat
+wat er draaide letterlijk hetzelfde was als wat er in de repository stond. Dat
+scheelt tijd als je op een wandtablet bij een klant moet zoeken waar iets misgaat.
+
+HACS maakte dat onwerkbaar. Voor een dashboardkaart registreert het precies één
+resource-URL, en bij een zip-release is dat de zip zélf — de browser probeert dan
+een zipbestand als module te draaien en er registreert geen enkele kaart. Eén
+gebundeld bestand is wat elke andere HACS-kaart uitlevert, en het lost meteen een
+tweede probleem op: er zijn geen submodules meer die in de browsercache van een
+klant kunnen verouderen. De bronnen blijven gesplitst; alleen het artefact is
+samengevoegd, met een sourcemap zodat een stacktrace nog naar het echte bestand
+wijst.
 
 ---
 

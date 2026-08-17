@@ -17,10 +17,10 @@
  * reads as the green bin without spending the colour that means "in orde".
  */
 
-import { DacCard, registerCard, registerEditor, toneValue } from "../base.js?v=0.1.0";
-import { DacEditor, sel, row, section } from "../editor/base.js?v=0.1.0";
-import { resolve } from "../icons.js?v=0.1.0";
-import { dayCount, daysBetween, nameOf, parseDate, relativeDay, shortDate, stateOf } from "../ha.js?v=0.1.0";
+import { DacCard, registerCard, registerEditor, toneValue, INCOMPLETE } from "../base.js";
+import { DacEditor, sel, row, section } from "../editor/base.js";
+import { resolve } from "../icons.js";
+import { dayCount, daysBetween, nameOf, parseDate, relativeDay, shortDate, stateOf } from "../ha.js";
 
 /** Bin colours, matched on what the sensor happens to be called. */
 const FRACTIONS = [
@@ -103,7 +103,7 @@ class WasteCard extends DacCard {
   validate(config) {
     const list = config.sensors ?? config.entities ?? (config.entity ? [config.entity] : []);
     if (!list.length) {
-      throw new Error("domotiapp-waste-card: kies minstens één afvalsensor met een datum.");
+      return { ...config, [INCOMPLETE]: "Kies minstens één afvalsensor waarvan de toestand een datum is." };
     }
     return {
       show_hero: true,

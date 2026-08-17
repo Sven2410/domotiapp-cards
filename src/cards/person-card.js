@@ -17,10 +17,10 @@
  * reads it as, and it always ships with a written label underneath.
  */
 
-import { DacCard, registerCard, registerEditor, toneValue } from "../base.js?v=0.1.0";
-import { DacEditor, sel, row, section } from "../editor/base.js?v=0.1.0";
-import { icons, resolve } from "../icons.js?v=0.1.0";
-import { bindActions, moreInfo, nameOf, stateOf } from "../ha.js?v=0.1.0";
+import { DacCard, registerCard, registerEditor, toneValue, INCOMPLETE } from "../base.js";
+import { DacEditor, sel, row, section } from "../editor/base.js";
+import { icons, resolve } from "../icons.js";
+import { bindActions, moreInfo, nameOf, stateOf } from "../ha.js";
 
 /** The tracker's own words for where somebody is. */
 function place(hass, st) {
@@ -105,7 +105,7 @@ class PersonCard extends DacCard {
   validate(config) {
     const list =
       config.persons ?? config.entities ?? (config.entity ? [config.entity] : []);
-    if (!list.length) throw new Error("domotiapp-person-card: kies minstens één persoon.");
+    if (!list.length) return { ...config, [INCOMPLETE]: "Kies minstens één persoon." };
     return {
       layout: "chips",
       show_state: true,

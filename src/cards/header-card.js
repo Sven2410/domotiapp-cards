@@ -12,10 +12,10 @@
  * tablet is a repaint every second, forever, for information nobody wanted.
  */
 
-import { DacCard, registerCard, registerEditor, toneValue } from "../base.js?v=0.1.0";
-import { DacEditor, sel, row, section } from "../editor/base.js?v=0.1.0";
-import { icons, resolve, weatherIcon } from "../icons.js?v=0.1.0";
-import { attrsOf, fmtNumber, localizeState, nameOf, stateOf } from "../ha.js?v=0.1.0";
+import { DacCard, registerCard, registerEditor, toneValue } from "../base.js";
+import { DacEditor, sel, row, section } from "../editor/base.js";
+import { icons, resolve, weatherIcon } from "../icons.js";
+import { attrsOf, fmtNumber, localizeState, nameOf, stateOf } from "../ha.js";
 
 /** What you say at this hour. */
 function greeting(d = new Date()) {
