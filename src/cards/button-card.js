@@ -69,20 +69,23 @@ class ButtonCard extends DacCard {
     }
     .chip .icon, .chip ha-icon { display: block; --mdc-icon-size: 20px; }
 
-    .txt { min-width: 0; flex: 1 1 auto; }
+    /* Onder elkaar, niet achter elkaar. Dit waren inline-spans in een gewone
+       blokcontainer, en dan lopen naam en toestand op één regel door -- wat
+       precies het verschil was met de licht-, klimaat- en entiteitenkaart. */
+    .txt { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
     .nm {
       font-size: 13.5px; font-weight: 500; line-height: 1.25;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .st {
-      margin-top: 2px; font-size: 11.5px; line-height: 1.3; color: var(--dac-ink-2);
+      font-size: 11.5px; line-height: 1.25; color: var(--dac-ink-2);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       font-variant-numeric: tabular-nums;
     }
 
     /* ---- row: the default. A pill you can put six of in a column. ---- */
-    :host([layout="row"]) .btn { min-height: 56px; padding: 8px 14px 8px 8px; }
-    :host([layout="row"]) .chip { width: 38px; height: 38px; }
+    :host([layout="row"]) .btn { min-height: 56px; padding: 7px 12px; gap: 11px; }
+    :host([layout="row"]) .chip { width: 40px; height: 40px; }
     :host([layout="row"]) .chip .icon, :host([layout="row"]) .chip ha-icon { width: 20px; height: 20px; }
 
     /* ---- tile: icon over label, for a grid of rooms or scenes. ---- */
@@ -191,8 +194,8 @@ class ButtonCard extends DacCard {
       })
     );
     // Anders telt een tik op het icoon ook als een tik op de kaart.
-    chip.addEventListener("click", (e) => e.stopPropagation());
-    chip.addEventListener("pointerdown", (e) => e.stopPropagation());
+    this.on(chip, "click", (e) => e.stopPropagation());
+    this.on(chip, "pointerdown", (e) => e.stopPropagation());
   }
 
   paint() {

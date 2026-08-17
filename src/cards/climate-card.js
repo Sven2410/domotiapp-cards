@@ -180,6 +180,8 @@ class ClimateCard extends DacCard {
 
   wire() {
     const c = this.config;
+    // Een lopende verzending overleeft een verplaatsing niet.
+    this.teardown_.push(() => clearTimeout(this.sendTimer_));
 
     this.teardown_.push(
       bindActions(this.$(".chip"), {
@@ -191,7 +193,7 @@ class ClimateCard extends DacCard {
     if (!set) return;
 
     set.querySelectorAll("button").forEach((b) =>
-      b.addEventListener("click", () => this.nudge_(Number(b.dataset.d)))
+      this.on(b, "click", () => this.nudge_(Number(b.dataset.d)))
     );
   }
 
@@ -218,6 +220,7 @@ class ClimateCard extends DacCard {
 
     clearTimeout(this.sendTimer_);
     this.sendTimer_ = setTimeout(() => {
+      this.sendTimer_ = null;
       this.hass.callService("climate", "set_temperature", {
         entity_id: c.entity,
         temperature: this.pending_,
@@ -228,7 +231,6 @@ class ClimateCard extends DacCard {
         this.paint();
       }, 1500);
     }, 450);
-    this.teardown_.push(() => clearTimeout(this.sendTimer_));
   }
 
   paintTarget_() {

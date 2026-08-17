@@ -239,6 +239,21 @@ export class DacCard extends HTMLElement {
     this.teardown_ = [];
   }
 
+  /**
+   * Een luisteraar die zichzelf opruimt.
+   *
+   * Gebruik deze in `wire()` en nergens `addEventListener` rechtstreeks. Sinds
+   * `wire()` bij elke aankoppeling opnieuw draait, stapelt een kale luisteraar
+   * zich op: na drie keer verplaatsen telt één tik op de plusknop van de
+   * thermostaat drie keer, en springt hij met anderhalve graad. Dat is precies
+   * hoe dat gemeld werd.
+   */
+  on(el, type, fn, opts) {
+    if (!el) return;
+    el.addEventListener(type, fn, opts);
+    this.teardown_.push(() => el.removeEventListener(type, fn, opts));
+  }
+
   $(sel) {
     return this.shadowRoot.querySelector(sel);
   }

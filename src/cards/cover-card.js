@@ -150,6 +150,9 @@ class CoverCard extends DacCard {
 
   wire() {
     this.dragging_ = new Set();
+    // Welke posities al een schuif hebben. Leeg bij elke aankoppeling, want de
+    // teardown heeft de oude koppeling net weggehaald.
+    this.bound_ = new Set();
     // Wat we dénken dat een motor zonder terugkoppeling doet, per rij. Leeft
     // alleen in dit tabblad -- er is niets om op de server te bewaren.
     this.assumed_ = new Map();
@@ -158,7 +161,7 @@ class CoverCard extends DacCard {
       const i = cvEl.dataset.i;
 
       cvEl.querySelectorAll(".keys button").forEach((btn) => {
-        btn.addEventListener("click", () => {
+        this.on(btn, "click", () => {
           const act = btn.dataset.act;
           const map = { open: "open_cover", stop: "stop_cover", close: "close_cover" };
           this.hass.callService("cover", map[act], { entity_id: this.config.covers[+i].entity });
@@ -249,18 +252,24 @@ class CoverCard extends DacCard {
       const wantPos = hasPos && this.config.show_position !== false;
       pos.hidden = !wantPos;
       if (wantPos) {
+        // De opbouw blijft staan tussen verplaatsingen door, het gedrag niet:
+        // teardown haalde de schuif los. `bound_` wordt in wire() geleegd, dus
+        // na terugplaatsen wordt er precies één keer opnieuw gekoppeld.
         if (!pos.dataset.built) {
           pos.dataset.built = "1";
           pos.innerHTML = sliderHtml("position");
-          const el = pos.querySelector(".slider");
-          el.setAttribute("aria-label", "Positie");
+          pos.querySelector(".slider").setAttribute("aria-label", "Positie");
+        }
+        if (!this.bound_.has(i)) {
+          this.bound_.add(i);
+          const el0 = pos.querySelector(".slider");
           const set = (v) => {
-            el.style.setProperty("--v", `${v}%`);
-            el.setAttribute("aria-valuenow", String(v));
+            el0.style.setProperty("--v", `${v}%`);
+            el0.setAttribute("aria-valuenow", String(v));
             cvEl.querySelector(".st").textContent = `${v}% open`;
           };
           this.teardown_.push(
-            bindSlider(el, {
+            bindSlider(el0, {
               value: () => attrsOf(this.hass, cfg.entity).current_position ?? 0,
               onInput: set,
               onCommit: (v) =>

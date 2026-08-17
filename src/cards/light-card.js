@@ -127,7 +127,7 @@ class LightCard extends DacCard {
       })
     );
 
-    this.$(".card").addEventListener("click", (e) => {
+    this.on(this.$(".card"), "click", (e) => {
       if (!e.target.closest(".toggle")) return;
       this.hass.callService("light", "toggle", { entity_id: entity });
     });
