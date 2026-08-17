@@ -1,24 +1,25 @@
 /**
- * Een lijst entiteiten, per één, twee of drie naast elkaar.
+ * Een lijst entiteiten, ingedeeld in rijen die je zelf samenstelt.
  *
- * Dit is de kaart voor alles wat geen eigen kaart verdient: een rijtje
- * schakelaars, een handvol sensoren, de scenes van een kamer. Per twee naast
- * elkaar is het gebruikelijke geval -- twee korte namen passen naast elkaar en
- * je haalt de halve hoogte eruit.
+ * De eerste opzet had één lijst en één kolomaantal voor de hele kaart, en dat
+ * viel uit elkaar zodra je twee korte namen naast elkaar wilde met daaronder één
+ * lange. Nu is een rij de eenheid: elke rij heeft zijn eigen kolomaantal en zijn
+ * eigen entiteiten, en per entiteit stel je naam, icoon, tikgedrag en het al dan
+ * niet tonen van de toestand in.
  *
- * Elk item is zijn eigen knop, met eigen icoon, naam en kleur. Tikken schakelt,
- * vasthouden opent meer informatie, en wie iets anders wil zet er een eigen
- * actie onder. Dat is dezelfde afspraak als op de knopkaart, want twee kaarten
- * die verschillend reageren op dezelfde tik is precies het soort verschil
- * waarvoor deze familie bestaat.
+ * Heeft een entiteit een eigen afbeelding -- een clublogo, een profielfoto, het
+ * merk van een integratie -- dan wordt die getoond in plaats van een icoon,
+ * tenzij je zelf een icoon hebt gekozen. Dat is de volgorde die klopt: wat de
+ * entiteit zelf meebrengt is specifieker dan wat het domein oplevert, en wat jij
+ * kiest is specifieker dan allebei.
  *
- * Alleen het icoon draagt de toestand. Een raster van zes oplichtende vlakken
- * is geen lijst meer maar een lichtkrant.
+ * Alleen het icoon draagt de toestand. Een raster van zes oplichtende vlakken is
+ * geen lijst meer maar een lichtkrant.
  */
 
 import { DacCard, registerCard, registerEditor, rowsFor, toneValue, TONES, INCOMPLETE } from "../base.js";
-import { DacEditor, sel } from "../editor/base.js";
 import { resolve, defaultIcon } from "../icons.js";
+import "../editor/entities-editor.js";
 import {
   attrsOf,
   bindActions,
@@ -33,21 +34,43 @@ import {
   stateOf,
 } from "../ha.js";
 
-/** Hoogte van één regel, en waar de kaart zijn rasterrijen op berekent. */
 const ITEM_H = 44;
 const GAP = 6;
+
+/** Eén item mag een string zijn, of een object met alles erop. */
+const asItem = (i) => (typeof i === "string" ? { entity: i } : { ...i });
+
+/**
+ * Breng elke configvorm terug tot rijen.
+ *
+ * De oude vorm -- één `items`- of `entities`-lijst met één `columns` -- blijft
+ * werken en wordt één rij. Dashboards die al draaien hoeven niet aangepast.
+ */
+export function toRows(config) {
+  if (Array.isArray(config.rows) && config.rows.length) {
+    return config.rows.map((r) => ({
+      columns: Math.min(Math.max(1, Number(r.columns) || 2), 3),
+      items: (r.items ?? r.entities ?? []).map(asItem),
+    }));
+  }
+  const flat = (config.items ?? config.entities ?? []).map(asItem);
+  if (!flat.length) return [];
+  return [{ columns: Math.min(Math.max(1, Number(config.columns) || 2), 3), items: flat }];
+}
 
 class EntitiesCard extends DacCard {
   static css = /* css */ `
     :host { display: block; height: 100%; }
 
+    /* 5px boven en onder plus 44px per regel plus de rand van 2 komt precies op
+       56 uit: één rasterrij, dezelfde hoogte als een Mushroom-kaart ernaast. */
     .card {
-      height: 100%; padding: 6px 10px;
-      display: flex; flex-direction: column; justify-content: center;
+      height: 100%; min-height: 56px; padding: 5px 10px;
+      display: flex; flex-direction: column; justify-content: center; gap: ${GAP}px;
     }
     :host([bare]) .card { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
 
-    .grid {
+    .row {
       display: grid; gap: ${GAP}px;
       grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
     }
@@ -61,12 +84,17 @@ class EntitiesCard extends DacCard {
     }
     .it:hover { background: var(--dac-surface); }
 
-    .chip { width: 36px; height: 36px; flex: 0 0 auto; }
+    .chip { width: 36px; height: 36px; flex: 0 0 auto; overflow: hidden; }
     .chip .icon, .chip ha-icon { width: 18px; height: 18px; --mdc-icon-size: 18px; }
-    /* Alleen het icoon draagt de toestand -- zie de kop. */
     .it[data-on="true"] .chip {
       box-shadow: 0 0 12px -3px color-mix(in srgb, var(--tone) 55%, transparent);
     }
+
+    /* Een eigen afbeelding vult de chip helemaal: een clublogo in een hoekje
+       van 18 pixels is geen logo meer. De rand blijft, zodat de vorm klopt met
+       de iconen ernaast. */
+    .chip.pic { background: rgba(255,255,255,.06); border-color: var(--dac-border); }
+    .chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
     .txt { min-width: 0; display: flex; flex-direction: column; }
     .nm {
@@ -83,30 +111,28 @@ class EntitiesCard extends DacCard {
     .it.unavailable { opacity: .42; pointer-events: none; }
 
     /* Onder de 260px passen twee namen niet meer naast elkaar zonder te
-       verminken, dus dan gaat het raster terug naar één kolom. */
+       verminken, dus dan gaat elke rij terug naar één kolom. */
     @container (max-width: 260px) {
-      .grid { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
     }
   `;
 
   validate(config) {
-    const raw = config.items ?? config.entities ?? [];
-    if (!raw.length) {
-      return { ...config, [INCOMPLETE]: "Voeg minstens één entiteit toe." };
+    const rows = toRows(config);
+    if (!rows.some((r) => r.items.length)) {
+      return { ...config, [INCOMPLETE]: "Voeg een rij toe en kies daar entiteiten in." };
     }
-    return {
-      columns: 2,
-      show_state: true,
-      ...config,
-      items: raw.map((i) => (typeof i === "string" ? { entity: i } : i)),
-    };
+    return { show_state: true, ...config, rows };
   }
 
   watched() {
-    return this.config.items.map((i) => i.entity);
+    return this.config.rows.flatMap((r) => r.items.map((i) => i.entity));
   }
 
-  /** De kleur van één item: wat de config zegt, anders wat eraan hangt. */
+  item_(r, i) {
+    return this.config.rows[+r]?.items[+i];
+  }
+
   tone_(item) {
     if (item.tone) return toneValue(item.tone);
     if (this.config.tone) return toneValue(this.config.tone);
@@ -119,27 +145,32 @@ class EntitiesCard extends DacCard {
   template() {
     const c = this.config;
     if (c.bare) this.setAttribute("bare", "");
-    // Een container-query heeft een container nodig; die zet ik hier zodat de
-    // kolommen op de kaartbreedte reageren en niet op die van het scherm.
     this.style.containerType = "inline-size";
 
-    const items = c.items
+    const rows = c.rows
       .map(
-        (_, i) => `
-      <div class="it" role="button" tabindex="0" data-i="${i}">
-        <span class="chip"></span>
-        <span class="txt"><span class="nm"></span><span class="st"></span></span>
+        (row, r) => `
+      <div class="row" style="--cols:${row.columns}">
+        ${row.items
+          .map(
+            (_, i) => `
+          <div class="it" role="button" tabindex="0" data-r="${r}" data-i="${i}">
+            <span class="chip"></span>
+            <span class="txt"><span class="nm"></span><span class="st"></span></span>
+          </div>`
+          )
+          .join("")}
       </div>`
       )
       .join("");
 
-    const cols = Math.min(Math.max(1, Number(c.columns) || 2), 3);
-    return `<div class="card surface"><div class="grid" style="--cols:${cols}">${items}</div></div>`;
+    return `<div class="card surface">${rows}</div>`;
   }
 
   wire() {
     this.$$(".it").forEach((el) => {
-      const item = this.config.items[+el.dataset.i];
+      const item = this.item_(el.dataset.r, el.dataset.i);
+      if (!item) return;
       const fire = (which, fallback) =>
         runAction(this, this.hass, item, item[which] ?? fallback);
 
@@ -154,7 +185,9 @@ class EntitiesCard extends DacCard {
 
   paint() {
     this.$$(".it").forEach((el) => {
-      const item = this.config.items[+el.dataset.i];
+      const item = this.item_(el.dataset.r, el.dataset.i);
+      if (!item) return;
+
       const st = stateOf(this.hass, item.entity);
       const on = isOn(st);
       const dead = isDead(st);
@@ -165,19 +198,27 @@ class EntitiesCard extends DacCard {
       const tone = this.tone_(item);
       el.style.setProperty("--tone", tone);
 
+      // Zelf gekozen icoon wint. Anders de eigen afbeelding van de entiteit,
+      // en pas als die er niet is het icoon van het domein.
       const chip = el.querySelector(".chip");
-      const wanted = item.icon || defaultIcon(item.entity, attrsOf(this.hass, item.entity));
+      const pic = !item.icon ? st?.attributes?.entity_picture : null;
+      const wanted = item.icon || (pic ? `pic:${pic}` : defaultIcon(item.entity, attrsOf(this.hass, item.entity)));
       if (chip.dataset.icon !== wanted) {
         chip.dataset.icon = wanted;
-        chip.innerHTML = resolve(wanted);
+        chip.classList.toggle("pic", Boolean(pic));
+        chip.innerHTML = pic
+          ? `<img src="${pic}" alt="" loading="lazy" />`
+          : resolve(item.icon || defaultIcon(item.entity, attrsOf(this.hass, item.entity)));
       }
-      chip.style.setProperty("--tone", on ? tone : "var(--dac-ink-3)");
+      // Een afbeelding heeft de kleur van zichzelf; alleen een icoon kleurt mee.
+      chip.style.setProperty("--tone", pic ? "var(--dac-ink-3)" : on ? tone : "var(--dac-ink-3)");
 
       const name = nameOf(this.hass, item.entity, item.name);
       this.text(el.querySelector(".nm"), name);
 
       const stEl = el.querySelector(".st");
-      if (this.config.show_state === false) {
+      const toon = item.show_state ?? this.config.show_state;
+      if (toon === false) {
         stEl.textContent = "";
       } else if (dead) {
         stEl.textContent = "Niet bereikbaar";
@@ -195,16 +236,18 @@ class EntitiesCard extends DacCard {
   }
 
   lines_() {
-    const cols = Math.min(Math.max(1, Number(this.config?.columns) || 2), 3);
-    return Math.ceil((this.config?.items?.length ?? 1) / cols);
+    return (this.config?.rows ?? []).reduce(
+      (n, r) => n + Math.ceil((r.items.length || 1) / r.columns),
+      0
+    );
   }
 
   getCardSize() {
-    return this.lines_();
+    return Math.max(1, this.lines_());
   }
 
   getGridOptions() {
-    const lines = this.lines_();
+    const lines = Math.max(1, this.lines_());
     const rows = rowsFor(12 + lines * ITEM_H + (lines - 1) * GAP);
     return { columns: 12, rows, min_columns: 4, min_rows: rows, max_rows: rows };
   }
@@ -214,104 +257,11 @@ class EntitiesCard extends DacCard {
   }
 
   static getStubConfig(hass, entities) {
-    return { entities: (entities ?? []).slice(0, 2), columns: 2 };
+    return { rows: [{ columns: 2, items: (entities ?? []).slice(0, 2).map((e) => ({ entity: e })) }] };
   }
 }
 
-/**
- * De editor werkt plat, de config houdt een lijst met objecten.
- *
- * `ha-form` kent geen herhalende rij, dus krijgt elke gekozen entiteit een eigen
- * naamveld, en een eigen icoon- en kleurkiezer daarboven. `serialize` vouwt dat
- * terug naar `items: [{ entity, name, icon, tone }]`, zodat de steiger nooit in
- * de YAML belandt.
- */
-class EntitiesEditor extends DacEditor {
-  defaults() {
-    return { columns: 2, show_state: true };
-  }
-
-  setConfig(config) {
-    const flat = { ...config };
-    const list = (config.items ?? config.entities ?? []).map((i) =>
-      typeof i === "string" ? { entity: i } : i
-    );
-    flat.entities = list.map((i) => i.entity);
-    delete flat.items;
-    for (const i of list) {
-      if (i.name) flat[`naam:${i.entity}`] = i.name;
-      if (i.icon) flat[`icoon:${i.entity}`] = i.icon;
-      if (i.tone) flat[`kleur:${i.entity}`] = i.tone;
-    }
-    super.setConfig(flat);
-  }
-
-  serialize(config) {
-    const out = { ...config };
-    const ids = out.entities ?? [];
-    out.items = ids.map((id) => {
-      const item = { entity: id };
-      if (out[`naam:${id}`]) item.name = out[`naam:${id}`];
-      if (out[`icoon:${id}`]) item.icon = out[`icoon:${id}`];
-      if (out[`kleur:${id}`]) item.tone = out[`kleur:${id}`];
-      return item;
-    });
-    delete out.entities;
-    for (const k of Object.keys(out)) {
-      if (/^(naam|icoon|kleur):/.test(k)) delete out[k];
-    }
-    return out;
-  }
-
-  /** Een icoon- en kleurkiezer per gekozen entiteit. */
-  pickers() {
-    const ids = (this.config_?.entities ?? []).filter((x) => typeof x === "string");
-    return ids.flatMap((id) => [
-      { key: `icoon:${id}`, kind: "icon", label: `Icoon voor ${this.short_(id)}`, fallback: "star" },
-      { key: `kleur:${id}`, kind: "tone", label: `Kleur voor ${this.short_(id)}` },
-    ]);
-  }
-
-  short_(id) {
-    return this.hass?.states?.[id]?.attributes?.friendly_name ?? id;
-  }
-
-  schema() {
-    const ids = (this.config_?.entities ?? []).filter((x) => typeof x === "string");
-    return [
-      { name: "entities", selector: { entity: { multiple: true } } },
-      {
-        name: "columns",
-        selector: sel.select([
-          { value: 1, label: "1 per rij" },
-          { value: 2, label: "2 naast elkaar" },
-          { value: 3, label: "3 naast elkaar" },
-        ]),
-      },
-      { name: "show_state", selector: sel.bool() },
-      ...ids.map((id) => ({ name: `naam:${id}`, selector: sel.text() })),
-    ];
-  }
-
-  label(s) {
-    if (s.name.startsWith("naam:")) return `Naam voor ${this.short_(s.name.slice(5))}`;
-    return (
-      { entities: "Entiteiten", columns: "Kolommen", show_state: "Toestand tonen" }[s.name] ??
-      super.label(s)
-    );
-  }
-
-  helper(s) {
-    if (s.name === "entities")
-      return "Per entiteit kun je hieronder een eigen icoon, kleur en naam zetten.";
-    if (s.name === "columns")
-      return "Onder de 260 pixels valt de kaart vanzelf terug op één kolom.";
-    return undefined;
-  }
-}
-
-registerEditor("domotiapp-entities-card-editor", EntitiesEditor);
 registerCard("domotiapp-entities-card", EntitiesCard, {
   name: "DomotiApp Entiteiten",
-  description: "Een lijst entiteiten, per één, twee of drie naast elkaar.",
+  description: "Rijen entiteiten, elk met een eigen kolomindeling.",
 });

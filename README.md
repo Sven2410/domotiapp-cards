@@ -22,7 +22,7 @@ dus je hoeft geen YAML te schrijven om een dashboard op te bouwen.
 | `custom:domotiapp-cover-card` | Rolluiken en zonneschermen |
 | `custom:domotiapp-person-card` | Wie er thuis is, compact |
 | `custom:domotiapp-waste-card` | Afvalkalender met dagteller |
-| `custom:domotiapp-entities-card` | Lijst entiteiten, 1 tot 3 naast elkaar |
+| `custom:domotiapp-entities-card` | Rijen entiteiten, elk met eigen kolomindeling |
 
 ---
 
@@ -141,6 +141,10 @@ staat.
   Amerikaanse maand-dag, wat stil de verkeerde dag geeft of `NaN`.
 - **Knoppen** weten dat een scene, script of `input_button` geen toestand heeft.
   Die worden niet grijs met "Niet bereikbaar" omdat ze nog nooit gedraaid hebben.
+- **Entiteiten** met een eigen afbeelding — een clublogo, een profielfoto, het merk
+  van een integratie — tonen die in plaats van een icoon, tenzij je zelf een icoon
+  kiest. Specifieker wint: wat jij kiest gaat voor wat de entiteit meebrengt, en
+  dat gaat voor wat het domein oplevert.
 
 ---
 
@@ -186,6 +190,22 @@ sections:
           - cover.wk_balkon
         icon_open: shutterOpen
         icon_closed: shutter
+
+      - type: custom:domotiapp-entities-card
+        rows:
+          - columns: 1
+            items:
+              - entity: sensor.eredivisie      # toont zijn eigen afbeelding
+          - columns: 2
+            items:
+              - entity: light.spots_sven
+                name: Spots
+                icon: bulb
+              - entity: switch.tuin
+                show_state: false
+                tap_action:
+                  action: navigate
+                  navigation_path: "#tuin"
 
       - type: custom:domotiapp-waste-card
         sensors:
