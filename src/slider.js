@@ -40,11 +40,37 @@ export function bindSlider(el, opts) {
     return clamp(Math.round(raw / step) * step, min, max);
   };
 
+  /**
+   * Vangen en loslaten mag nooit de rest onderuit halen.
+   *
+   * `releasePointerCapture` gooit een NotFoundError zodra er geen actieve
+   * pointer meer is -- na een onderbroken gebaar, of wanneer het besturings-
+   * systeem de aanraking al heeft ingetrokken. Onafgevangen betekent dat: geen
+   * onCommit, dus geen service-aanroep, dus een schuif die je verzet en die
+   * daarna terugspringt.
+   */
+  const capture = (id) => {
+    try {
+      el.setPointerCapture?.(id);
+    } catch {
+      // Vangen lukte niet; slepen werkt dan nog steeds, alleen niet buiten het
+      // element. Dat is geen reden om de beweging af te breken.
+    }
+  };
+
+  const release = (id) => {
+    try {
+      if (el.hasPointerCapture?.(id)) el.releasePointerCapture(id);
+    } catch {
+      // Al losgelaten. Prima.
+    }
+  };
+
   const down = (e) => {
     if (opts.disabled?.()) return;
     if (e.button != null && e.button !== 0) return;
     dragging = true;
-    el.setPointerCapture?.(e.pointerId);
+    capture(e.pointerId);
     el.classList.add("dragging");
     // De waarde springt meteen naar waar je drukt -- geen dood eerste contact.
     opts.onInput(valueAt(e.clientX));
@@ -60,14 +86,15 @@ export function bindSlider(el, opts) {
   const up = (e) => {
     if (!dragging) return;
     dragging = false;
-    el.releasePointerCapture?.(e.pointerId);
+    release(e.pointerId);
     el.classList.remove("dragging");
     opts.onCommit(valueAt(e.clientX));
   };
 
-  const cancel = () => {
+  const cancel = (e) => {
     if (!dragging) return;
     dragging = false;
+    release(e?.pointerId);
     el.classList.remove("dragging");
     // Afgebroken gebaar: terug naar wat het apparaat zegt, niet naar waar de
     // vinger toevallig was.

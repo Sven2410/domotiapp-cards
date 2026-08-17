@@ -170,6 +170,9 @@ export class DacCard extends HTMLElement {
       this.build_();
       return;
     }
+    // Een kaart die nog nergens op wijst heeft alleen een uitlegkaart in zijn
+    // shadow root staan. `wire()` zou daar naar knoppen zoeken die er niet zijn.
+    if (this.config[INCOMPLETE]) return;
     // De DOM staat er nog, de listeners niet meer: opnieuw koppelen.
     if (!this.wired_) {
       this.wire();

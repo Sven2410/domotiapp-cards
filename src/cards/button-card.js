@@ -169,7 +169,10 @@ class ButtonCard extends DacCard {
 
     this.teardown_.push(
       bindActions(this.$(".btn"), {
-        onTap: () => fire("tap_action", defaultTapAction(c.entity)),
+        // De kaart opent, het icoon schakelt. Dat is dezelfde verdeling die de
+        // editor wegschrijft, zodat een handgeschreven config en een geklikte
+        // config zich hetzelfde gedragen.
+        onTap: () => fire("tap_action", { action: c.entity ? "more-info" : "none" }),
         onHold: () => fire("hold_action", { action: c.entity ? "more-info" : "none" }),
         onDouble: c.double_tap_action
           ? () => fire("double_tap_action", { action: "none" })
@@ -274,8 +277,22 @@ class ButtonCard extends DacCard {
 class ButtonEditor extends DacEditor {
   // Zonder deze stonden alle vinkjes uit terwijl de instelling aanstond:
   // aanzetten deed dan niets en alleen uitzetten had zichtbaar effect.
+  /**
+   * De acties staan er expliciet in.
+   *
+   * Ze weglaten en op de kaart terugvallen leek netter, maar de actie-editor van
+   * Home Assistant vult zichzelf dan met "geen actie" en schrijft dat weg. Wat
+   * er in de YAML staat is nu ook wat de kaart doet.
+   */
   defaults() {
-    return { layout: "row", show_state: true, show_name: true, show_icon: true };
+    return {
+      layout: "row",
+      show_state: true,
+      show_name: true,
+      show_icon: true,
+      icon_tap_action: { action: "toggle" },
+      tap_action: { action: "more-info" },
+    };
   }
 
   pickers() {
@@ -302,11 +319,11 @@ class ButtonEditor extends DacEditor {
       { name: "show_icon", selector: sel.bool() },
       { name: "show_name", selector: sel.bool() },
       { name: "show_state", selector: sel.bool() },
-      { name: "icon_tap_action", selector: sel.action() },
-      { name: "icon_hold_action", selector: sel.action() },
-      { name: "tap_action", selector: sel.action() },
-      { name: "hold_action", selector: sel.action() },
-      { name: "double_tap_action", selector: sel.action() },
+      { name: "icon_tap_action", selector: sel.action("toggle") },
+      { name: "icon_hold_action", selector: sel.action("more-info") },
+      { name: "tap_action", selector: sel.action("more-info") },
+      { name: "hold_action", selector: sel.action("more-info") },
+      { name: "double_tap_action", selector: sel.action("none") },
     ];
   }
 
@@ -332,7 +349,7 @@ class ButtonEditor extends DacEditor {
     if (s.name === "entity")
       return "Mag leeg blijven: zonder entiteit wordt dit een navigatieknop.";
     if (s.name === "icon_tap_action")
-      return "Leeg laten schakelt de entiteit. Handig: het icoon schakelt de lichtgroep, de kaart navigeert naar de ruimte.";
+      return "Handig: het icoon schakelt de lichtgroep, de kaart navigeert naar de ruimte.";
     if (s.name === "tap_action")
       return "Wat er gebeurt als je naast het icoon tikt, bijvoorbeeld navigeren naar een pop-up.";
     return undefined;

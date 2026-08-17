@@ -117,7 +117,13 @@ const states = Object.fromEntries([
   S("input_boolean.slapen", "off", { friendly_name: "Slapen" }),
   S("scene.radio", "unknown", { friendly_name: "Radio" }),
   S("alarm_control_panel.alarm", "disarmed", { friendly_name: "Alarm" }),
-  S("climate.woonkamer", "heat", { friendly_name: "Woonkamer", current_temperature: 22.5, temperature: 19.5 }),
+  S("climate.woonkamer", "heat", { friendly_name: "Woonkamer", current_temperature: 23.2, temperature: 19.5,
+    hvac_action: "heating", min_temp: 5, max_temp: 30 }),
+  S("climate.badkamer", "heat", { friendly_name: "Badkamer", current_temperature: 24.2, temperature: 20,
+    hvac_action: "idle", min_temp: 5, max_temp: 25 }),
+  S("sensor.temp_logeerkamer", "18.4", { friendly_name: "Logeerkamer", device_class: "temperature", unit_of_measurement: "°C" }),
+  S("sensor.vocht_slaapkamer", "80", { friendly_name: "Slaapkamer vocht", device_class: "humidity", unit_of_measurement: "%" }),
+  S("sensor.temp_slaapkamer", "21.3", { friendly_name: "Slaapkamer", device_class: "temperature", unit_of_measurement: "°C" }),
 ]);
 
 const log = (msg, cls = "") => {
@@ -220,6 +226,26 @@ const COLUMNS = [
     { type: "custom:domotiapp-cover-card",
       covers: ["cover.wk_achter", "cover.keuken_voor", "cover.zonnescherm_woonkamer", "cover.garagedeur"],
       group: true },
+  ]],
+  ["Klimaat, drie manieren", [
+    { type: "custom:domotiapp-climate-card", entity: "climate.woonkamer" },
+    { type: "custom:domotiapp-climate-card", entity: "climate.badkamer", humidity: "sensor.vocht_slaapkamer" },
+    { type: "custom:domotiapp-climate-card", temperature: "sensor.temp_logeerkamer" },
+    { type: "custom:domotiapp-climate-card", temperature: "sensor.temp_slaapkamer", humidity: "sensor.vocht_slaapkamer", name: "Slaapkamer Sven" },
+  ]],
+  ["Entiteiten, per twee", [
+    { type: "custom:domotiapp-entities-card", columns: 2, items: [
+      { entity: "light.spots_sven", name: "Spots", icon: "bulb" },
+      { entity: "light.groep_buiten", name: "Buiten", icon: "leaf", tone: "teal" },
+      { entity: "input_boolean.slapen", name: "Slapen", icon: "moon", tone: "house" },
+      { entity: "scene.radio", name: "Radio", icon: "radio", tone: "pink" },
+      { entity: "sensor.temp_slaapkamer", name: "Slaapkamer", icon: "thermo" },
+      { entity: "sensor.vocht_slaapkamer", name: "Vocht", icon: "drop", tone: "water" },
+    ] },
+    { type: "custom:domotiapp-entities-card", columns: 1, items: [
+      { entity: "cover.garagedeur", name: "Garagedeur", icon: "garageOpen" },
+      { entity: "alarm_control_panel.alarm", name: "Alarm", icon: "shield" },
+    ] },
   ]],
   ["Knoppen en afval", [
     { type: "custom:domotiapp-button-card", entity: "input_boolean.slapen", icon: "moon", tone: "house" },

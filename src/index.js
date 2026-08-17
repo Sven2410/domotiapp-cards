@@ -17,12 +17,14 @@
  * happens inside each card's own file, next to the class it registers.
  */
 
-export const VERSION = "0.1.5";
+export const VERSION = "0.1.6";
 
 import "./cards/header-card.js";
 import "./cards/separator-card.js";
 import "./cards/button-card.js";
 import "./cards/light-card.js";
+import "./cards/climate-card.js";
+import "./cards/entities-card.js";
 import "./cards/cover-card.js";
 import "./cards/person-card.js";
 import "./cards/waste-card.js";

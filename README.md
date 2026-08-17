@@ -18,9 +18,11 @@ dus je hoeft geen YAML te schrijven om een dashboard op te bouwen.
 | `custom:domotiapp-separator-card` | Sectiekop met icoon en vervagende lijn |
 | `custom:domotiapp-button-card` | Eén control als rij, tegel of compacte pil |
 | `custom:domotiapp-light-card` | Dimbare én schakelbare lampen |
+| `custom:domotiapp-climate-card` | Thermostaat, losse sensoren, of allebei |
 | `custom:domotiapp-cover-card` | Rolluiken en zonneschermen |
 | `custom:domotiapp-person-card` | Wie er thuis is, compact |
 | `custom:domotiapp-waste-card` | Afvalkalender met dagteller |
+| `custom:domotiapp-entities-card` | Lijst entiteiten, 1 tot 3 naast elkaar |
 
 ---
 
@@ -43,7 +45,7 @@ onder **Instellingen → Dashboards → Bronnen**:
 ```
 
 Ververs daarna hard (Ctrl+F5). In de console hoor je één regel te zien:
-`DOMOTIAPP-CARDS 0.1.1`. Zie je die niet, dan is de resource niet geladen.
+`DOMOTIAPP-CARDS 0.1.6`. Zie je die niet, dan is de resource niet geladen.
 
 ---
 
@@ -130,9 +132,10 @@ staat.
   vulling, zodat je ziet wat je krijgt voordat je de kamer in loopt.
 - **Rolluiken** lezen `supported_features`. De positieschuif verschijnt alleen bij
   motoren die hun stand terugmelden (`SET_POSITION`). Doen ze dat niet — de meeste
-  Nederlandse rolluikmotoren — dan zijn het open, stop en dicht, en zegt de kaart
-  *"Geen terugkoppeling"* in plaats van `Onbekend`. Er wordt dan ook geen knop
-  gemarkeerd als actief, want er is niets bekend om te markeren.
+  Nederlandse rolluikmotoren — dan zijn het open, stop en dicht, zonder statusregel:
+  een zin die zegt dat er niets bekend is, voegt niets toe. Het icoon volgt dan de
+  knop die je indrukte, als aanname, zonder die knop te markeren alsof er iets
+  gemeten is.
 - **Afval** sorteert zelf op datum en kiest de bakkleur op de naam van de sensor.
   Datums worden met een eigen parser gelezen: `18-08-2026` leest JavaScript als een
   Amerikaanse maand-dag, wat stil de verkeerde dag geeft of `NaN`.
@@ -149,40 +152,40 @@ sections:
   - type: grid
     cards:
       - type: custom:domotiapp-header-card
-        weather: weather.buienradar
+        weather: weather.buienradar        # temperatuur, wind, vochtigheid
+        weather_uv: weather.forecast_home  # alleen de UV-index
         sun: sun.sun
-        chips: [humidity, wind, uv, precipitation, sunset]
+        precipitation_entity: sensor.neerslagintensiteit
 
       - type: custom:domotiapp-separator-card
         name: Thuis
         icon: people
-        tone: accent
 
       - type: custom:domotiapp-person-card
         persons:
           - person.sven
-          - person.lieke
-          - person.rinette
-        show_summary: true
+          - entity: device_tracker.galaxy_a55
+            name: Lieke                    # naam per persoon te overschrijven
 
       - type: custom:domotiapp-separator-card
-        name: Rolluiken
-        icon: shutter
-        tone: solar
+        name: Woonkamer
+        icon: house
+        secondary_entity: sensor.woonkamer_temperatuur
+        secondary_icon: thermo
+
+      - type: custom:domotiapp-climate-card
+        entity: climate.thermostaat_woonkamer
+        humidity: sensor.woonkamer_vochtigheid
+
+      - type: custom:domotiapp-light-card
+        entity: light.ledstrip_sven        # één lamp per kaart
 
       - type: custom:domotiapp-cover-card
-        title: Woonkamer
         covers:
           - cover.wk_achter
           - cover.wk_balkon
-          - cover.zonnescherm_woonkamer
-        group: true
-
-      - type: custom:domotiapp-light-card
-        title: Slaapkamer
-        lights:
-          - light.ledstrip_sven
-          - light.spots_sven
+        icon_open: shutterOpen
+        icon_closed: shutter
 
       - type: custom:domotiapp-waste-card
         sensors:
@@ -190,19 +193,35 @@ sections:
           - sensor.mijnafvalwijzer_gft
           - sensor.mijnafvalwijzer_papier
           - sensor.mijnafvalwijzer_restafval
+        tones:
+          sensor.mijnafvalwijzer_gft: teal    # kleur per fractie, optioneel
 ```
 
-Een navigatietegel zonder entiteit — zo bouw je een ruimte-raster:
+### Een ruimtetegel
+
+Het icoon schakelt de lichtgroep, de kaart opent de ruimte. Twee knoppen op één
+kaart, zoals je dat van een Mushroom-tegel gewend bent:
 
 ```yaml
 - type: custom:domotiapp-button-card
-  name: Begane grond
-  icon: floorB
-  tone: house
+  entity: light.groep_woonkamer
+  name: Woonkamer
+  icon: house
   layout: tile
+  icon_tap_action:
+    action: toggle
   tap_action:
     action: navigate
-    navigation_path: "#beganegrond"
+    navigation_path: "#woonkamer"
+```
+
+Een klimaatkaart kan ook zonder thermostaat — dan is het een meting:
+
+```yaml
+- type: custom:domotiapp-climate-card
+  temperature: sensor.logeerkamer_temperatuur
+  humidity: sensor.logeerkamer_vochtigheid
+  name: Logeerkamer
 ```
 
 ---

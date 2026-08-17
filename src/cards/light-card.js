@@ -6,12 +6,11 @@
  * rasterrij hoog (56px), zodat een kolom met kaarten van verschillende makelij
  * toch één kolom blijft.
  *
- * De kleurstrips staan er alleen zolang de lamp brandt. Kleur kiezen voor een
- * lamp die uit is regelt niets. Dat betekent wel dat een kleurlamp twee
- * rasterrijen opgeeft en de tweede leeg laat zolang hij uit staat: het raster
- * kent vaste rijen, en van hoogte springen bij elke schakeling zou de kaarten
- * eronder heen en weer duwen. Van die twee kwaden is een rustige lege regel de
- * minste.
+ * De kleurstrips staan er alleen zolang de lamp brandt, en de kaart groeit
+ * daarmee mee: `rows: "auto"` laat Home Assistant de hoogte de inhoud volgen, en
+ * de kaarten eronder schuiven op. Uit is de kaart dus precies één rasterrij --
+ * dezelfde hoogte als een Mushroom-kaart ernaast -- en aan is hij zo hoog als
+ * hij moet zijn.
  *
  * De schuiven schrijven bij loslaten, niet tijdens het slepen: `light.turn_on`
  * op elke pixel overspoelt de bus en laat oudere Zigbee-lampen zichtbaar
@@ -36,10 +35,10 @@ const pct = (brightness) => Math.max(1, Math.round(((brightness ?? 0) / 255) * 1
 
 class LightCard extends DacCard {
   static css = /* css */ `
-    :host { display: block; height: 100%; }
+    :host { display: block; }
 
     .card {
-      height: 100%; min-height: 56px; padding: 7px 12px;
+      min-height: 56px; padding: 7px 12px;
       display: flex; flex-direction: column; justify-content: center; gap: 7px;
     }
     :host([bare]) .card { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
@@ -301,20 +300,15 @@ class LightCard extends DacCard {
     }
   }
 
-  /** Eén rij, of twee zodra de lamp kleur of kleurtemperatuur kan. */
-  rows_() {
-    const st = stateOf(this.hass, this.config?.entity);
-    const colour = this.config?.show_colour !== false && st && (hasColour(st) || hasTemp(st));
-    return colour ? 2 : 1;
-  }
-
   getCardSize() {
-    return this.rows_();
+    const st = stateOf(this.hass, this.config?.entity);
+    return st?.state === "on" && (hasColour(st) || hasTemp(st)) ? 2 : 1;
   }
 
   getGridOptions() {
-    const rows = this.rows_();
-    return { columns: 12, rows, min_columns: 4, min_rows: rows, max_rows: rows };
+    // "auto" laat de hoogte de inhoud volgen, zodat de kleurstrips de kaarten
+    // eronder naar beneden duwen in plaats van een lege regel achter te laten.
+    return { columns: 12, rows: "auto", min_columns: 4, min_rows: 1 };
   }
 
   static getConfigElement() {

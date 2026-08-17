@@ -32,7 +32,17 @@ export const sel = {
   select: (options) => ({
     select: { mode: "dropdown", options },
   }),
-  action: () => ({ ui_action: {} }),
+  /**
+   * Home Assistant's eigen actie-editor.
+   *
+   * `default_action` is niet optioneel. Zonder die sleutel staat de keuzelijst
+   * op "Geen actie", en zodra het formulier één keer terugmeldt staat er
+   * `{action: "none"}` in de YAML. De kaart doet dan niets en dat is dan ook
+   * precies wat er geconfigureerd staat -- alleen heeft niemand het zo bedoeld.
+   */
+  action: (defaultAction = "more-info") => ({
+    ui_action: { default_action: defaultAction },
+  }),
 };
 
 /**
@@ -141,6 +151,7 @@ export class DacEditor extends HTMLElement {
     this.pickers_ = [];
 
     const pickerDefs = this.pickers();
+    this.pickerSig_ = pickerDefs.map((d) => d.key).join("|");
     if (pickerDefs.length) {
       const wrap = document.createElement("div");
       wrap.style.cssText = "display:flex;flex-direction:column;gap:12px;margin-bottom:16px";
@@ -180,6 +191,17 @@ export class DacEditor extends HTMLElement {
   }
 
   sync_() {
+    // Sommige kaarten hebben een kiezer per gekozen entiteit. Verandert die
+    // lijst, dan moet de editor opnieuw opgebouwd worden -- pickers worden
+    // eenmalig aangemaakt, anders dan het schema.
+    const wanted = this.pickers().map((d) => d.key).join("|");
+    if (this.pickerSig_ !== undefined && this.pickerSig_ !== wanted) {
+      this.built_ = false;
+      this.form_ = null;
+      this.render_();
+      return;
+    }
+
     if (this.form_) {
       this.form_.hass = this.hass_;
       // Het schema kan van de config afhangen -- een naamveld per gekozen
