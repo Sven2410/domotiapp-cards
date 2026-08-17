@@ -42,9 +42,14 @@ class SeparatorCard extends DacCard {
     }
 
     .sub {
-      flex: 0 0 auto; font-size: 12px; color: var(--dac-ink-3);
+      flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--dac-ink-2);
       font-variant-numeric: tabular-nums;
     }
+    .sub:empty { display: none; }
+    .sub .si { display: flex; color: var(--tone); }
+    .sub .si:empty { display: none; }
+    .sub .si .icon, .sub .si ha-icon { width: 14px; height: 14px; --mdc-icon-size: 14px; }
 
     /* Without an icon the title should still start where the icons above and
        below it start, or the column develops a wobble. */
@@ -69,7 +74,7 @@ class SeparatorCard extends DacCard {
         ${showIcon ? `<span class="chip">${resolve(c.icon, "star")}</span>` : ""}
         <h3></h3>
         ${c.line === false ? "" : `<span class="rule"></span>`}
-        <span class="sub"></span>
+        <span class="sub"><span class="si"></span><span class="sv"></span></span>
       </div>`;
   }
 
@@ -80,16 +85,26 @@ class SeparatorCard extends DacCard {
     if (!sub) return;
 
     const st = stateOf(this.hass, this.config.secondary_entity);
+    const si = sub.querySelector(".si");
+    const sv = sub.querySelector(".sv");
+
     if (!st) {
-      sub.textContent = "";
+      sv.textContent = "";
+      si.innerHTML = "";
       return;
+    }
+
+    const wanted = this.config.secondary_icon ?? "";
+    if (si.dataset.icon !== wanted) {
+      si.dataset.icon = wanted;
+      si.innerHTML = wanted ? resolve(wanted) : "";
     }
 
     // A sensor is its number and its unit. Anything else is a state, and it
     // gets Home Assistant's own translation rather than the raw string --
     // "heat" is not a word a customer should read on their wall.
     const unit = st.attributes.unit_of_measurement;
-    sub.textContent = unit
+    sv.textContent = unit
       ? `${st.state} ${unit}`
       : st.attributes.current_temperature != null
         ? `${st.attributes.current_temperature} °C`
@@ -114,10 +129,15 @@ class SeparatorCard extends DacCard {
 }
 
 class SeparatorEditor extends DacEditor {
+  defaults() {
+    return { line: true, tone: "accent" };
+  }
+
   pickers() {
     return [
-      { key: "icon", kind: "icon", label: LABELS.icon, fallback: "star" },
+      { key: "icon", kind: "icon", label: "Icoon links", fallback: "star" },
       { key: "tone", kind: "tone", label: LABELS.tone },
+      { key: "secondary_icon", kind: "icon", label: "Icoon bij de waarde rechts", fallback: "question" },
     ];
   }
 

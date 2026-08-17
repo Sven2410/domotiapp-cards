@@ -173,14 +173,15 @@ class PersonCard extends DacCard {
       const where = place(this.hass, st);
       if (where.home) home++;
 
+      // Thuis is goed, weg is rood, en onbekend is oranje: dat laatste is geen
+      // fout maar wel iets om naar te kijken -- een tracker die niets meldt is
+      // meestal een telefoon met de app uit, en dat wil je zien.
       const tone =
-        cfg.tone
-          ? toneValue(cfg.tone)
-          : where.home === true
-            ? "var(--dac-good)"
-            : where.home === false
-              ? "var(--dac-warn)"
-              : "var(--dac-ink-3)";
+        where.home === true
+          ? "var(--dac-good)"
+          : where.home === false
+            ? "var(--dac-bad)"
+            : "var(--dac-warn)";
       el.style.setProperty("--tone", tone);
 
       const name = nameOf(this.hass, cfg.entity, cfg.name);
@@ -243,10 +244,12 @@ class PersonCard extends DacCard {
 }
 
 class PersonEditor extends DacEditor {
-  pickers() {
-    return [{ key: "tone", kind: "tone", label: "Vaste kleur (leeg = thuis/afwezig)" }];
+  defaults() {
+    return { layout: "chips", show_state: true };
   }
 
+  // Geen kleurkiezer: de kleur is hier de toestand zelf -- thuis, weg, onbekend --
+  // en die vrij laten kiezen zou precies de betekenis weghalen.
   schema() {
     return [
       { name: "persons", selector: { entity: { domain: ["person", "device_tracker"], multiple: true } } },
@@ -260,32 +263,16 @@ class PersonEditor extends DacEditor {
           ]),
         }
       ),
-      section("Weergave", "mdi:eye", [
-        row(
-          { name: "show_state", selector: sel.bool() },
-          { name: "show_summary", selector: sel.bool() }
-        ),
-        { name: "columns", selector: sel.number(2, 8) },
-        { name: "bare", selector: sel.bool() },
-      ]),
     ];
   }
 
   label(s) {
-    return (
-      {
-        persons: "Personen",
-        show_state: "Thuis/afwezig tonen",
-        show_summary: "Aantal thuis tonen",
-        columns: "Kolommen",
-        bare: "Zonder kaartrand",
-      }[s.name] ?? super.label(s)
-    );
+    return { persons: "Personen" }[s.name] ?? super.label(s);
   }
 
   helper(s) {
-    if (s.name === "columns")
-      return "Leeg laten laat de kaart het aantal personen volgen, tot zes op een rij.";
+    if (s.name === "persons")
+      return "Thuis is groen, weg is rood, geen melding is oranje.";
     return undefined;
   }
 }

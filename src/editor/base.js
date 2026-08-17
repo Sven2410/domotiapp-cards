@@ -55,8 +55,23 @@ export class DacEditor extends HTMLElement {
   }
 
   setConfig(config) {
-    this.config_ = { ...config };
+    // The card's own defaults are merged in before the form sees the config.
+    //
+    // Without this a setting that defaults to on renders as an unticked box:
+    // the card behaves as if it is on, the editor says it is off, and ticking
+    // it appears to do nothing because it was already true. Unticking is then
+    // the only control that visibly works. Seeding the defaults makes the form
+    // show what the card is actually doing.
+    this.config_ = { ...this.defaults(), ...config };
     this.render_();
+  }
+
+  /**
+   * Values the card applies when the config is silent.
+   * Keep in step with the card's own `validate()`.
+   */
+  defaults() {
+    return {};
   }
 
   set hass(hass) {

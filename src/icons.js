@@ -216,6 +216,9 @@ export const icons = {
     <path d="M21.2 10.6v2.8"/>
     <rect x="5.2" y="9.8" width="6" height="4.4" rx="1" fill="currentColor" stroke="none"/>`),
 
+  gaugeArrow: draw(`<path d="M4.2 17.4a8.4 8.4 0 1 1 15.6 0"/>
+    <path d="m12 13.6 3.6-3.8"/><circle cx="12" cy="14.8" r="1.3"/>`),
+
   clock: draw(`<circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.2 1.9"/>`),
 
   washer: draw(`<rect x="4.2" y="2.8" width="15.6" height="18.4" rx="2"/>

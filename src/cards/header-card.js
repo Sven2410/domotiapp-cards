@@ -1,15 +1,21 @@
 /**
- * The top of a dashboard: who is looking, what time it is, what it is doing
- * outside.
+ * De bovenrand van een dashboard: wie er kijkt, hoe laat het is, wat het buiten doet.
  *
- * Rebuilt from the original domotiapp-header with one change that matters more
- * than any styling: no width gate. The old one was hidden below 768px, which
- * meant the greeting existed on exactly the device nobody uses to check the
- * weather. Everything here reflows instead -- the chips wrap, the clock moves
- * under the temperature, and nothing is withheld from a phone.
+ * Eén smalle strip over de volle breedte, niet een blok. Dat is wat een header
+ * hoort te zijn: hij oriënteert je en gaat dan opzij voor de bediening. Alles
+ * staat op één regel en schuift op tot het niet meer past.
  *
- * The clock ticks on the minute rather than the second. A second hand on a wall
- * tablet is a repaint every second, forever, for information nobody wanted.
+ * Onder een ingestelde breedte verdwijnt hij helemaal. Op een telefoon is de
+ * bovenrand het schaarste stuk scherm dat er is, en HA's eigen kop toont daar de
+ * tijd al. Dat gebeurt met matchMedia en niet met een CSS-mediaquery, omdat het
+ * afkappunt instelbaar is en een mediaquery geen custom property kan lezen.
+ *
+ * Twee weerentiteiten, want dat is de praktijk: de ene integratie geeft de beste
+ * temperatuur en wind, de andere is de enige met een UV-index. Ze afzonderlijk
+ * kunnen aanwijzen scheelt een template-sensor.
+ *
+ * De klok tikt op de minuut. Een secondewijzer op een wandtablet is een repaint
+ * per seconde, eeuwig, voor informatie waar niemand om vroeg.
  */
 
 import { DacCard, registerCard, registerEditor, toneValue } from "../base.js";
@@ -17,7 +23,6 @@ import { DacEditor, sel, row, section } from "../editor/base.js";
 import { icons, resolve, weatherIcon } from "../icons.js";
 import { attrsOf, fmtNumber, localizeState, nameOf, stateOf } from "../ha.js";
 
-/** What you say at this hour. */
 function greeting(d = new Date()) {
   const h = d.getHours();
   if (h < 6) return "Goedenacht";
@@ -30,79 +35,98 @@ const WEEKDAYS = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrij
 const MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli",
   "augustus", "september", "oktober", "november", "december"];
 
-/** The details that can sit under the greeting, in the order they read best. */
 const CHIPS = {
   humidity: { icon: "drop", tone: "water", label: "Luchtvochtigheid" },
   wind: { icon: "wind", tone: "neutral", label: "Wind" },
   uv: { icon: "uv", tone: "solar", label: "UV-index" },
   precipitation: { icon: "rain", tone: "water", label: "Neerslag" },
-  sunset: { icon: "sunset", tone: "warn", label: "Zonsondergang" },
+  pressure: { icon: "gaugeArrow", tone: "neutral", label: "Luchtdruk" },
   sunrise: { icon: "sunrise", tone: "warn", label: "Zonsopkomst" },
+  sunset: { icon: "sunset", tone: "warn", label: "Zonsondergang" },
 };
 
 const DEFAULT_CHIPS = ["humidity", "wind", "uv", "precipitation", "sunset"];
 
-/** Compass bearing to the eight points a person would actually say. */
 const bearing = (deg) => {
   if (deg == null || Number.isNaN(+deg)) return "";
-  const points = ["N", "NO", "O", "ZO", "Z", "ZW", "W", "NW"];
-  return points[Math.round(+deg / 45) % 8];
+  return ["N", "NO", "O", "ZO", "Z", "ZW", "W", "NW"][Math.round(+deg / 45) % 8];
 };
 
 class HeaderCard extends DacCard {
   static css = /* css */ `
     :host { display: block; }
+    /* Onder het afkappunt bestaat de kaart niet -- ook geen lege ruimte, want
+       in een sections-view laat een verborgen kaart anders zijn gat staan. */
+    :host([narrow]) { display: none; }
 
-    .card { padding: 16px 18px; }
-    :host([bare]) .card { background: none; border: 0; box-shadow: none; padding: 4px 2px; }
-
-    .top { display: flex; align-items: flex-start; gap: 16px; }
-
-    .who { min-width: 0; flex: 1 1 auto; }
-    .hello {
-      font-size: clamp(17px, 4.4vw, 21px); font-weight: 400; letter-spacing: -.02em;
-      line-height: 1.2;
+    .strip {
+      /* Wrappen in plaats van de details wegduwen. In een smalle kolom zou een
+         niet-wrappende strip de weerchips tot nul breedte knijpen en het masker
+         zou ze dan onzichtbaar maken -- weg zonder dat iets kapot lijkt, wat de
+         vervelendste soort verdwijning is. */
+      display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px;
+      padding: 10px 16px;
+      min-height: 52px;
+      background: var(--dac-surface);
+      border: 1px solid var(--dac-border);
+      border-radius: var(--dac-radius);
+      box-shadow: var(--dac-shadow);
+      position: relative; overflow: hidden;
     }
+    :host([bare]) .strip { background: none; border: 0; box-shadow: none; padding: 6px 2px; }
+
+    /* Haarlijn accent onderlangs, dezelfde die de Coach-kop draagt. */
+    .strip::after {
+      content: ""; position: absolute; inset: auto 0 0 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--dac-accent) 22%,
+                  var(--dac-accent-hi) 50%, var(--dac-accent) 78%, transparent);
+      opacity: .55;
+    }
+    :host([no-rule]) .strip::after { display: none; }
+
+    .who { flex: 0 0 auto; min-width: 0; order: 1; }
+    .hello { font-size: 14.5px; font-weight: 400; letter-spacing: -.01em; line-height: 1.2; white-space: nowrap; }
     .hello b { font-weight: 600; }
-    .date { margin-top: 3px; font-size: 12px; color: var(--dac-ink-3); }
+    .date { margin-top: 1px; font-size: 11px; color: var(--dac-ink-3); white-space: nowrap; }
 
-    .now { flex: 0 0 auto; text-align: right; line-height: 1; }
-    .now .temp {
-      font-size: clamp(26px, 7vw, 34px); font-weight: 300; letter-spacing: -.035em;
-      font-variant-numeric: tabular-nums;
-    }
-    .now .temp span { font-size: .45em; color: var(--dac-ink-3); }
-    .now .cond {
-      display: flex; align-items: center; justify-content: flex-end; gap: 6px;
-      margin-top: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
-      color: var(--dac-ink-3);
-    }
-    .now .cond .icon, .now .cond ha-icon { width: 15px; height: 15px; --mdc-icon-size: 15px; color: var(--tone); }
-
-    .clock { margin-top: 8px; font-size: 13px; color: var(--dac-ink-2); font-variant-numeric: tabular-nums; }
-
-    /* The chips wrap rather than scroll: five of them fit on two lines on the
-       narrowest phone, and a wrapped row can be read at a glance where a
-       scrolling one hides half of itself. */
+    /* De weerdetails krijgen de ruimte die overblijft en schuiven horizontaal
+       weg als die op is, in plaats van de strip twee regels hoog te maken. */
     .chips {
-      display: flex; flex-wrap: wrap; gap: 7px 14px;
-      margin-top: 14px; padding-top: 12px;
-      border-top: 1px solid var(--dac-border);
+      flex: 1 1 260px; min-width: 0; order: 3;
+      display: flex; align-items: center; gap: 16px;
+      overflow-x: auto; scrollbar-width: none;
+      -webkit-mask-image: linear-gradient(90deg, #000 0 92%, transparent 100%);
+      mask-image: linear-gradient(90deg, #000 0 92%, transparent 100%);
     }
+    .chips::-webkit-scrollbar { display: none; }
     .chips:empty { display: none; }
     .chip2 {
-      display: inline-flex; align-items: center; gap: 6px;
+      display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
       font-size: 12px; color: var(--dac-ink-2); white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
     .chip2 .icon, .chip2 ha-icon { width: 14px; height: 14px; --mdc-icon-size: 14px; color: var(--tone); }
 
-    /* A hairline of brand colour, the same one the Coach header wears. */
-    .rule {
-      height: 1px; margin-top: 14px;
-      background: linear-gradient(90deg, transparent, var(--dac-accent) 22%,
-                  var(--dac-accent-hi) 50%, var(--dac-accent) 78%, transparent);
-      opacity: .55;
+    .now { flex: 0 0 auto; order: 2; display: flex; align-items: center; gap: 9px; margin-left: auto; }
+    .now .ic { display: flex; color: var(--wtone); }
+    .now .ic .icon, .now .ic ha-icon { width: 22px; height: 22px; --mdc-icon-size: 22px; }
+    .now .temp { font-size: 21px; font-weight: 300; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+    .now .temp span { font-size: .55em; color: var(--dac-ink-3); }
+    .now .cond {
+      font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+      color: var(--dac-ink-3); white-space: nowrap;
+    }
+
+    .clock {
+      flex: 0 0 auto; order: 4; margin-left: auto;
+      padding-left: 16px; border-left: 1px solid var(--dac-border);
+      font-size: 18px; font-weight: 400; letter-spacing: -.01em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 900px) {
+      .strip { gap: 12px; }
+      .now .cond { display: none; }
     }
   `;
 
@@ -112,6 +136,7 @@ class HeaderCard extends DacCard {
       show_weather: true,
       show_chips: true,
       show_rule: true,
+      hide_below: 768,
       chips: DEFAULT_CHIPS,
       ...config,
     };
@@ -119,36 +144,37 @@ class HeaderCard extends DacCard {
 
   watched() {
     const c = this.config;
-    return [c.weather, c.sun, c.person, c.uv_entity, c.precipitation_entity].filter(Boolean);
+    return [c.weather, c.weather_uv, c.sun, c.person, c.precipitation_entity].filter(Boolean);
   }
 
   template() {
     const c = this.config;
     if (c.bare) this.setAttribute("bare", "");
+    if (c.show_rule === false) this.setAttribute("no-rule", "");
 
     return `
-      <div class="card surface">
-        <div class="top">
-          <div class="who">
-            <div class="hello"></div>
-            <div class="date"></div>
-            ${c.show_clock === false ? "" : `<div class="clock tnum"></div>`}
-          </div>
-          ${c.show_weather === false ? "" : `
-          <div class="now">
-            <div class="temp tnum"></div>
-            <div class="cond"><span class="ic"></span><span class="txt"></span></div>
-          </div>`}
+      <div class="strip">
+        <div class="who">
+          <div class="hello"></div>
+          <div class="date"></div>
         </div>
         ${c.show_chips === false ? "" : `<div class="chips"></div>`}
-        ${c.show_rule === false ? "" : `<div class="rule"></div>`}
+        ${c.show_weather === false ? "" : `
+        <div class="now">
+          <span class="ic"></span>
+          <span>
+            <span class="temp tnum"></span>
+            <span class="cond"></span>
+          </span>
+        </div>`}
+        ${c.show_clock === false ? "" : `<div class="clock tnum"></div>`}
       </div>`;
   }
 
   wire() {
-    // Tick on the minute, then every minute -- not every sixty seconds from
-    // whenever the card happened to load, which drifts visibly against a phone's
-    // own clock.
+    // Tik op de minuut, dan elke minuut -- niet elke zestig seconden vanaf het
+    // moment dat de kaart toevallig laadde, want dat loopt zichtbaar uit de pas
+    // met de klok van de telefoon ernaast.
     const schedule = () => {
       const ms = 60000 - (Date.now() % 60000) + 50;
       this.timer_ = setTimeout(() => {
@@ -158,6 +184,15 @@ class HeaderCard extends DacCard {
     };
     schedule();
     this.teardown_.push(() => clearTimeout(this.timer_));
+
+    const below = Number(this.config.hide_below) || 0;
+    if (below > 0) {
+      const mq = matchMedia(`(max-width: ${below - 1}px)`);
+      const apply = () => this.toggleAttribute("narrow", mq.matches);
+      apply();
+      mq.addEventListener("change", apply);
+      this.teardown_.push(() => mq.removeEventListener("change", apply));
+    }
   }
 
   paintClock_() {
@@ -171,10 +206,7 @@ class HeaderCard extends DacCard {
     const hello = this.config.greeting ?? greeting(now);
     this.$(".hello").innerHTML = name ? `${hello}, <b>${name}</b>` : hello;
 
-    this.text(
-      ".date",
-      `${WEEKDAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`
-    );
+    this.text(".date", `${WEEKDAYS[now.getDay()]} ${now.getDate()} ${MONTHS[now.getMonth()]}`);
 
     const clock = this.$(".clock");
     if (clock) {
@@ -198,10 +230,8 @@ class HeaderCard extends DacCard {
     const now = this.$(".now");
     if (now && w) {
       const icon = weatherIcon(w.state);
-      now.style.setProperty("--tone", toneValue(c.tone, "water"));
+      now.style.setProperty("--wtone", toneValue(c.tone, "water"));
 
-      // The unit rides tight against the number, at a smaller size. A gap
-      // before the degree sign reads as a rendering fault rather than as style.
       const unit = this.hass?.config?.unit_system?.temperature ?? "°C";
       this.$(".temp").innerHTML =
         wa.temperature != null
@@ -213,16 +243,13 @@ class HeaderCard extends DacCard {
         ic.dataset.icon = icon;
         ic.innerHTML = resolve(icon, "cloud");
       }
-      this.text(now.querySelector(".txt"), localizeState(this.hass, w));
+      this.text(now.querySelector(".cond"), localizeState(this.hass, w));
     }
 
     const chips = this.$(".chips");
     if (!chips) return;
 
-    const wanted = (c.chips ?? DEFAULT_CHIPS)
-      .map((key) => this.chip_(key, wa))
-      .filter(Boolean);
-
+    const wanted = (c.chips ?? DEFAULT_CHIPS).map((key) => this.chip_(key, wa)).filter(Boolean);
     const sig = wanted.map((x) => `${x.key}${x.value}`).join("|");
     if (chips.dataset.sig === sig) return;
     chips.dataset.sig = sig;
@@ -231,13 +258,13 @@ class HeaderCard extends DacCard {
       .map(
         (x) =>
           `<span class="chip2" style="--tone:${toneValue(CHIPS[x.key].tone)}" title="${CHIPS[x.key].label}">
-             ${icons[CHIPS[x.key].icon]}${x.value}
+             ${icons[CHIPS[x.key].icon] ?? ""}${x.value}
            </span>`
       )
       .join("");
   }
 
-  /** One chip's value, or null when this house has nothing to say about it. */
+  /** Eén chip, of niets als dit huis daar niets over te melden heeft. */
   chip_(key, wa) {
     const c = this.config;
     switch (key) {
@@ -248,27 +275,46 @@ class HeaderCard extends DacCard {
         if (wa.wind_speed == null) return null;
         const unit = this.hass?.config?.unit_system?.wind_speed ?? "km/h";
         const dir = bearing(wa.wind_bearing);
-        return { key, value: `${fmtNumber(this.hass, wa.wind_speed, 0)} ${unit}${dir ? ` ${dir}` : ""}` };
+        return {
+          key,
+          value: `${fmtNumber(this.hass, wa.wind_speed, 0)} ${unit}${dir ? ` ${dir}` : ""}`,
+        };
       }
 
       case "uv": {
-        // Not every weather integration carries UV, so a second entity may be
-        // pointed at one that does.
-        const uv = wa.uv_index ?? attrsOf(this.hass, c.uv_entity).uv_index ??
-          (c.uv_entity ? Number(stateOf(this.hass, c.uv_entity)?.state) : null);
-        return uv != null && !Number.isNaN(+uv)
-          ? { key, value: `UV ${fmtNumber(this.hass, uv, 1)}` }
+        // De UV-index komt van de tweede weerentiteit als die er is: niet elke
+        // integratie levert hem, en de integratie met de beste temperatuur is
+        // zelden dezelfde als die met UV.
+        const alt = attrsOf(this.hass, c.weather_uv);
+        const raw =
+          alt.uv_index ??
+          wa.uv_index ??
+          (c.weather_uv ? Number(stateOf(this.hass, c.weather_uv)?.state) : null);
+        return raw != null && !Number.isNaN(+raw)
+          ? { key, value: `UV ${fmtNumber(this.hass, raw, 1)}` }
           : null;
       }
 
       case "precipitation": {
-        const p = c.precipitation_entity
-          ? Number(stateOf(this.hass, c.precipitation_entity)?.state)
-          : wa.precipitation;
-        return p != null && !Number.isNaN(+p)
-          ? { key, value: `${fmtNumber(this.hass, p, 1)} mm` }
+        // Een weerentiteit draagt de neerslag zelden als attribuut -- meestal
+        // zit die in de voorspelling of in een losse sensor. Dus mag je er een
+        // aanwijzen, en dan wint die.
+        const st = stateOf(this.hass, c.precipitation_entity);
+        if (st) {
+          const n = Number(st.state);
+          if (Number.isNaN(n)) return null;
+          const unit = st.attributes.unit_of_measurement ?? "mm";
+          return { key, value: `${fmtNumber(this.hass, n, 1)} ${unit}` };
+        }
+        return wa.precipitation != null && !Number.isNaN(+wa.precipitation)
+          ? { key, value: `${fmtNumber(this.hass, wa.precipitation, 1)} mm` }
           : null;
       }
+
+      case "pressure":
+        return wa.pressure != null
+          ? { key, value: `${fmtNumber(this.hass, wa.pressure, 0)} ${wa.pressure_unit ?? "hPa"}` }
+          : null;
 
       case "sunset":
       case "sunrise": {
@@ -292,11 +338,11 @@ class HeaderCard extends DacCard {
   }
 
   getCardSize() {
-    return 3;
+    return 1;
   }
 
   getGridOptions() {
-    return { columns: "full", rows: 4, min_rows: 3 };
+    return { columns: "full", rows: "auto" };
   }
 
   static getConfigElement() {
@@ -310,6 +356,17 @@ class HeaderCard extends DacCard {
 }
 
 class HeaderEditor extends DacEditor {
+  defaults() {
+    return {
+      show_clock: true,
+      show_weather: true,
+      show_chips: true,
+      show_rule: true,
+      hide_below: 768,
+      chips: DEFAULT_CHIPS,
+    };
+  }
+
   pickers() {
     return [{ key: "tone", kind: "tone", label: "Kleur weericoon" }];
   }
@@ -318,28 +375,29 @@ class HeaderEditor extends DacEditor {
     return [
       row(
         { name: "weather", selector: sel.entity("weather") },
-        { name: "sun", selector: sel.entity("sun") }
+        { name: "weather_uv", selector: { entity: { domain: ["weather", "sensor"] } } }
+      ),
+      row(
+        { name: "sun", selector: sel.entity("sun") },
+        { name: "precipitation_entity", selector: sel.entity("sensor") }
       ),
       row(
         { name: "person", selector: sel.entity(["person"]) },
         { name: "name", selector: sel.text() }
       ),
       { name: "greeting", selector: sel.text() },
-      section("Weerdetails", "mdi:weather-partly-cloudy", [
-        {
-          name: "chips",
-          selector: {
-            select: {
-              multiple: true,
-              mode: "list",
-              options: Object.entries(CHIPS).map(([value, v]) => ({ value, label: v.label })),
-            },
+      {
+        name: "chips",
+        selector: {
+          select: {
+            multiple: true,
+            mode: "list",
+            options: Object.entries(CHIPS).map(([value, v]) => ({ value, label: v.label })),
           },
         },
-        { name: "uv_entity", selector: sel.entity("sensor") },
-        { name: "precipitation_entity", selector: sel.entity("sensor") },
-      ]),
+      },
       section("Weergave", "mdi:eye", [
+        { name: "hide_below", selector: sel.number(0, 1400, 8) },
         row(
           { name: "show_clock", selector: sel.bool() },
           { name: "show_weather", selector: sel.bool() }
@@ -356,11 +414,13 @@ class HeaderEditor extends DacEditor {
   label(s) {
     return (
       {
+        weather: "Weer (temperatuur, wind)",
+        weather_uv: "Tweede weerbron (UV-index)",
+        precipitation_entity: "Neerslagsensor",
         chips: "Welke details",
-        uv_entity: "UV uit aparte sensor",
-        precipitation_entity: "Neerslag uit aparte sensor",
         greeting: "Eigen begroeting",
         show_rule: "Accentlijn tonen",
+        hide_below: "Verbergen onder breedte (px)",
         bare: "Zonder kaartrand",
         name: "Vaste naam",
       }[s.name] ?? super.label(s)
@@ -368,12 +428,15 @@ class HeaderEditor extends DacEditor {
   }
 
   helper(s) {
+    if (s.name === "weather_uv")
+      return "Alleen voor de UV-index. Handig als je hoofdbron die niet meelevert.";
+    if (s.name === "precipitation_entity")
+      return "Een sensor in mm of mm/h, bijvoorbeeld neerslagintensiteit of regen laatste uur.";
+    if (s.name === "hide_below")
+      return "768 verbergt de header op telefoons en houdt hem op tablets en desktops. 0 zet het uit.";
     if (s.name === "greeting")
       return "Leeg laten voor Goedemorgen / Goedemiddag / Goedenavond op de klok.";
-    if (s.name === "person")
-      return "Leeg laten om de naam van de ingelogde gebruiker te tonen.";
-    if (s.name === "uv_entity")
-      return "Alleen nodig als je weerintegratie zelf geen UV meelevert.";
+    if (s.name === "person") return "Leeg laten om de naam van de ingelogde gebruiker te tonen.";
     return undefined;
   }
 }
@@ -381,5 +444,5 @@ class HeaderEditor extends DacEditor {
 registerEditor("domotiapp-header-card-editor", HeaderEditor);
 registerCard("domotiapp-header-card", HeaderCard, {
   name: "DomotiApp Header",
-  description: "Begroeting, klok en weer. Werkt ook op een telefoon.",
+  description: "Smalle strip met begroeting, weer en klok. Verbergt zichzelf op telefoons.",
 });

@@ -226,9 +226,8 @@ export function runAction(node, hass, config, action) {
 export function bindActions(el, { onTap, onHold, onDouble }) {
   let timer = null;
   let held = false;
-  let lastTap = 0;
-  let startX = 0;
-  let startY = 0;
+  let taps = 0;
+  let tapTimer = null;
 
   const clear = () => {
     if (timer) clearTimeout(timer);
@@ -238,70 +237,66 @@ export function bindActions(el, { onTap, onHold, onDouble }) {
   const down = (e) => {
     if (e.button != null && e.button !== 0) return;
     held = false;
-    startX = e.clientX;
-    startY = e.clientY;
     clear();
-    if (onHold) {
-      timer = setTimeout(() => {
-        held = true;
-        // A hold that lands should feel like it landed, on a device that can.
-        navigator.vibrate?.(18);
-        onHold();
-      }, 500);
-    }
+    if (!onHold) return;
+    timer = setTimeout(() => {
+      held = true;
+      // A hold that lands should feel like it landed, on a device that can.
+      navigator.vibrate?.(18);
+      onHold();
+    }, 500);
   };
 
-  const up = (e) => {
-    clear();
-    if (held) return;
-    // A finger that travelled was scrolling, not pressing.
-    if (Math.hypot(e.clientX - startX, e.clientY - startY) > 12) return;
-
-    if (onDouble) {
-      const now = Date.now();
-      if (now - lastTap < 280) {
-        lastTap = 0;
-        onDouble();
-        return;
-      }
-      lastTap = now;
-      setTimeout(() => {
-        if (lastTap && Date.now() - lastTap >= 280) {
-          lastTap = 0;
-          onTap?.();
-        }
-      }, 290);
+  // The tap fires on `click`, not on `pointerup`.
+  //
+  // Deriving it from pointerup was wrong: it worked in the card editor's
+  // preview and did nothing on the real dashboard, because Home Assistant wraps
+  // a live card in layers that can swallow or retarget a raw pointer sequence.
+  // `click` is the browser's own reading of "this element was activated" and it
+  // survives all of that, including keyboard activation and assistive tech.
+  const click = () => {
+    // Suppressed after a hold, or the long-press would also fire the tap.
+    if (held) {
+      held = false;
       return;
     }
-    onTap?.();
+    if (!onDouble) {
+      onTap?.();
+      return;
+    }
+    taps++;
+    if (taps === 1) {
+      tapTimer = setTimeout(() => {
+        taps = 0;
+        onTap?.();
+      }, 260);
+      return;
+    }
+    clearTimeout(tapTimer);
+    taps = 0;
+    onDouble();
   };
 
   const cancel = () => {
     clear();
-    held = false;
-  };
-
-  const key = (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    e.preventDefault();
-    onTap?.();
   };
 
   el.addEventListener("pointerdown", down);
-  el.addEventListener("pointerup", up);
+  el.addEventListener("pointerup", cancel);
   el.addEventListener("pointercancel", cancel);
   el.addEventListener("pointerleave", cancel);
-  el.addEventListener("keydown", key);
+  el.addEventListener("click", click);
   // Long-press on a touch screen otherwise opens the browser's own menu.
   el.addEventListener("contextmenu", (e) => e.preventDefault());
 
   return () => {
     clear();
+    clearTimeout(tapTimer);
     el.removeEventListener("pointerdown", down);
-    el.removeEventListener("pointerup", up);
+    el.removeEventListener("pointerup", cancel);
     el.removeEventListener("pointercancel", cancel);
     el.removeEventListener("pointerleave", cancel);
-    el.removeEventListener("keydown", key);
+    el.removeEventListener("click", click);
   };
 }
 

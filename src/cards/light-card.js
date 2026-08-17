@@ -1,31 +1,33 @@
 /**
- * Lights, dimmable and not, in one card.
+ * Eén lamp, met alles wat die lamp kan.
  *
- * The card asks the lamp what it can do rather than asking the installer.
- * `supported_color_modes` of exactly `["onoff"]` means a switch and gets a
- * switch; anything else gets a brightness slider. Making that a setting would
- * mean every dashboard has one lamp where somebody ticked the wrong box.
+ * De kaart vraagt de lamp wat hij kan in plaats van de installateur.
+ * `supported_color_modes` van precies `["onoff"]` krijgt een tuimelaar, al het
+ * andere een helderheidsschuif. Kan hij kleur of kleurtemperatuur, dan komen die
+ * strips erbij -- maar alleen zolang de lamp aan staat, want kleur kiezen voor
+ * een lamp die uit is regelt niets en vult wel het halve scherm.
  *
- * The slider writes on release, not while dragging: `light.turn_on` on every
- * pixel of travel floods the bus and makes older Zigbee bulbs stutter visibly.
- * The fill follows the finger immediately, so it still feels live.
+ * De schuiven schrijven bij loslaten, niet tijdens het slepen: `light.turn_on`
+ * op elke pixel overspoelt de bus en laat oudere Zigbee-lampen zichtbaar
+ * stotteren. De vulling volgt de vinger meteen, dus het voelt wel live.
  *
- * While a finger is down, incoming states are ignored for that row. Otherwise
- * the lamp's own report of where it used to be yanks the handle back out from
- * under the drag.
+ * Zolang een vinger op een schuif staat worden binnenkomende toestanden voor die
+ * schuif genegeerd, anders trekt de lamp de knop onder je hand vandaan terug
+ * naar waar hij stond.
  */
 
-import { DacCard, registerCard, registerEditor, toneValue, TONES, INCOMPLETE } from "../base.js";
-import { DacEditor, sel, row, section, LABELS } from "../editor/base.js";
+import { DacCard, registerCard, registerEditor, INCOMPLETE } from "../base.js";
+import { DacEditor, sel } from "../editor/base.js";
 import { resolve } from "../icons.js";
 import { bindActions, isDead, moreInfo, nameOf, stateOf } from "../ha.js";
 
 const DIMMABLE = new Set(["brightness", "color_temp", "hs", "rgb", "rgbw", "rgbww", "xy", "white"]);
+const COLOURFUL = new Set(["hs", "rgb", "rgbw", "rgbww", "xy"]);
 
-const isDimmable = (st) => {
-  const modes = st?.attributes?.supported_color_modes ?? [];
-  return modes.some((m) => DIMMABLE.has(m));
-};
+const modesOf = (st) => st?.attributes?.supported_color_modes ?? [];
+const isDimmable = (st) => modesOf(st).some((m) => DIMMABLE.has(m));
+const hasColour = (st) => modesOf(st).some((m) => COLOURFUL.has(m));
+const hasTemp = (st) => modesOf(st).includes("color_temp");
 
 const pct = (brightness) => Math.max(1, Math.round(((brightness ?? 0) / 255) * 100));
 
@@ -33,36 +35,30 @@ class LightCard extends DacCard {
   static css = /* css */ `
     :host { display: block; }
 
-    .card { padding: 6px 14px; }
-    :host([bare]) .card {
-      background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0;
-    }
-
-    .head { display: flex; align-items: baseline; gap: 10px; padding: 10px 0 4px; }
-    .head b { font-size: 14px; font-weight: 600; }
-    .head .sum { margin-left: auto; font-size: 12px; color: var(--dac-ink-3); font-variant-numeric: tabular-nums; }
-    .head:empty { display: none; }
+    .card { padding: 10px 14px 12px; }
+    :host([bare]) .card { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
 
     .lamp {
-      display: grid; grid-template-columns: 42px 1fr; gap: 12px; align-items: center;
-      padding: 11px 0; min-height: var(--dac-row-h);
+      /* Bovenaan uitlijnen, niet centreren: zodra de kleurstrips erbij komen
+         zou een gecentreerd icoon halverwege de kaart gaan zweven, los van de
+         naam waar het bij hoort. */
+      display: grid; grid-template-columns: 42px 1fr; gap: 12px; align-items: start;
+      padding: 4px 0;
     }
-    .lamp + .lamp { border-top: 1px solid var(--dac-border); }
+    .lamp + .lamp { border-top: 1px solid var(--dac-border); margin-top: 8px; padding-top: 12px; }
 
     .chip {
-      width: 42px; height: 42px; cursor: pointer;
+      width: 42px; height: 42px; margin-top: -2px; cursor: pointer;
       background: color-mix(in srgb, var(--tone) 13%, transparent);
       border-color: color-mix(in srgb, var(--tone) 30%, transparent);
       transition: color 200ms ease, background 200ms ease, border-color 200ms ease;
     }
     .chip .icon, .chip ha-icon { width: 20px; height: 20px; --mdc-icon-size: 20px; }
     .lamp[data-on="false"] .chip {
-      color: var(--dac-ink-3);
-      background: rgba(255,255,255,.05);
-      border-color: var(--dac-border);
+      color: var(--dac-ink-3); background: rgba(255,255,255,.05); border-color: var(--dac-border);
     }
-    /* A lit lamp glows a little. It is the one place in the family where a
-       shadow carries meaning rather than depth. */
+    /* Een brandende lamp gloeit een beetje. Dat is de enige plek in de familie
+       waar een schaduw betekenis draagt in plaats van diepte. */
     .lamp[data-on="true"] .chip {
       box-shadow: 0 0 14px -2px color-mix(in srgb, var(--tone) 55%, transparent);
     }
@@ -77,11 +73,11 @@ class LightCard extends DacCard {
       font-variant-numeric: tabular-nums;
     }
 
-    /* ---- brightness ---- */
+    /* ---- schuiven ---- */
     .slider { position: relative; height: 26px; margin-top: 7px; }
     .slider .track {
       position: absolute; inset: 9px 0; border-radius: var(--dac-radius-pill);
-      background: rgba(255,255,255,.075); overflow: hidden;
+      background: var(--strip, rgba(255,255,255,.075)); overflow: hidden;
     }
     .slider .fill {
       position: absolute; inset: 0 auto 0 0; width: var(--v, 0%);
@@ -90,6 +86,8 @@ class LightCard extends DacCard {
         color-mix(in srgb, var(--tone) 45%, transparent), var(--tone));
       transition: width 90ms linear;
     }
+    /* Een kleurenstrip is de schaal zelf -- daar hoort geen vulling overheen. */
+    .slider[data-strip] .fill { display: none; }
     .slider input {
       position: absolute; inset: -6px 0; width: 100%; height: 38px; margin: 0;
       appearance: none; -webkit-appearance: none; background: transparent; cursor: ew-resize;
@@ -103,9 +101,22 @@ class LightCard extends DacCard {
       width: 16px; height: 26px; border-radius: 6px; border: 0;
       background: var(--dac-ink); box-shadow: 0 2px 8px rgba(0,0,0,.6); cursor: ew-resize;
     }
+    .slider[data-strip] input::-webkit-slider-thumb {
+      width: 14px; border: 2px solid var(--dac-bg); box-shadow: 0 0 0 1px rgba(255,255,255,.6);
+    }
+    .slider[data-strip] input::-moz-range-thumb {
+      width: 14px; border: 2px solid var(--dac-bg); box-shadow: 0 0 0 1px rgba(255,255,255,.6);
+    }
     .slider input:focus-visible { outline: 2px solid var(--dac-accent-hi); outline-offset: 2px; border-radius: 10px; }
 
-    /* ---- on/off, for lamps that only do that ---- */
+    .colour { margin-top: 2px; }
+    .colour[hidden] { display: none; }
+    .colour .lbl {
+      margin-top: 10px; font-size: 10.5px; font-weight: 600; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--dac-ink-3);
+    }
+
+    /* ---- aan/uit, voor lampen die alleen dat kunnen ---- */
     .toggle {
       margin-top: 7px; width: 52px; height: 30px; padding: 0; cursor: pointer;
       border-radius: var(--dac-radius-pill); position: relative;
@@ -128,8 +139,9 @@ class LightCard extends DacCard {
 
   validate(config) {
     const list = config.lights ?? config.entities ?? (config.entity ? [config.entity] : []);
-    if (!list.length) return { ...config, [INCOMPLETE]: "Kies minstens één lamp." };
+    if (!list.length) return { ...config, [INCOMPLETE]: "Kies een lamp." };
     return {
+      show_colour: true,
       ...config,
       lights: list.map((l) => (typeof l === "string" ? { entity: l } : l)),
     };
@@ -139,34 +151,25 @@ class LightCard extends DacCard {
     return this.config.lights.map((l) => l.entity);
   }
 
-  toneFor(light) {
-    return toneValue(light.tone ?? this.config.tone, "lit") ?? TONES.lit;
-  }
-
   template() {
     const c = this.config;
     if (c.bare) this.setAttribute("bare", "");
 
     const rows = c.lights
-      .map((l, i) => {
-        const tone = this.toneFor(l);
-        return `
-        <div class="lamp" data-i="${i}" data-on="false" style="--tone:${tone}">
+      .map(
+        (l, i) => `
+        <div class="lamp" data-i="${i}" data-on="false" style="--tone:var(--dac-lit)">
           <button class="chip" type="button" aria-label="Aan of uit"></button>
           <div>
             <div class="top"><span class="nm"></span><span class="v tnum"></span></div>
             <div class="ctl"></div>
+            <div class="colour" hidden></div>
           </div>
-        </div>`;
-      })
+        </div>`
+      )
       .join("");
 
-    const head =
-      c.title || c.show_summary !== false
-        ? `<div class="head">${c.title ? `<b>${c.title}</b>` : ""}<span class="sum"></span></div>`
-        : "";
-
-    return `<div class="card surface">${head}${rows}</div>`;
+    return `<div class="card surface">${rows}</div>`;
   }
 
   wire() {
@@ -183,50 +186,58 @@ class LightCard extends DacCard {
         })
       );
 
-      // The control itself is built on first paint, once we know what the lamp
-      // can do -- `supported_color_modes` is not there before the first state.
-      lampEl.querySelector(".ctl").addEventListener("input", (e) => {
+      const onInput = (e) => {
         const input = e.target;
         if (input.type !== "range") return;
-        this.dragging_.add(i);
+        const kind = input.dataset.kind;
+        this.dragging_.add(`${i}:${kind}`);
         const v = +input.value;
-        lampEl.querySelector(".fill").style.setProperty("--v", `${v}%`);
-        lampEl.querySelector(".v").textContent = v === 0 ? "uit" : `${v}%`;
-      });
-
-      lampEl.querySelector(".ctl").addEventListener("change", (e) => {
-        const input = e.target;
-        if (input.type !== "range") return;
-        this.dragging_.delete(i);
-        const v = +input.value;
-        if (v === 0) {
-          this.hass.callService("light", "turn_off", { entity_id: entity });
-        } else {
-          this.hass.callService("light", "turn_on", {
-            entity_id: entity,
-            brightness_pct: v,
-          });
+        input.closest(".slider").style.setProperty("--v", `${v}%`);
+        if (kind === "brightness") {
+          lampEl.querySelector(".v").textContent = v === 0 ? "uit" : `${v}%`;
         }
-      });
+      };
 
-      lampEl.querySelector(".ctl").addEventListener("click", (e) => {
-        const t = e.target.closest(".toggle");
-        if (!t) return;
-        this.hass.callService("light", "toggle", { entity_id: entity });
-      });
+      const onChange = (e) => {
+        const input = e.target;
+        if (input.type !== "range") return;
+        const kind = input.dataset.kind;
+        this.dragging_.delete(`${i}:${kind}`);
+        const v = +input.value;
+
+        if (kind === "brightness") {
+          if (v === 0) this.hass.callService("light", "turn_off", { entity_id: entity });
+          else this.hass.callService("light", "turn_on", { entity_id: entity, brightness_pct: v });
+          return;
+        }
+        if (kind === "hue") {
+          const sat = stateOf(this.hass, entity)?.attributes?.hs_color?.[1] ?? 100;
+          this.hass.callService("light", "turn_on", { entity_id: entity, hs_color: [v, sat] });
+          return;
+        }
+        if (kind === "kelvin") {
+          this.hass.callService("light", "turn_on", { entity_id: entity, color_temp_kelvin: v });
+        }
+      };
+
+      for (const host of [lampEl.querySelector(".ctl"), lampEl.querySelector(".colour")]) {
+        host.addEventListener("input", onInput);
+        host.addEventListener("change", onChange);
+        host.addEventListener("click", (e) => {
+          if (!e.target.closest(".toggle")) return;
+          this.hass.callService("light", "toggle", { entity_id: entity });
+        });
+      }
     });
   }
 
   paint() {
-    let onCount = 0;
-
     this.$$(".lamp").forEach((lampEl) => {
       const i = +lampEl.dataset.i;
       const cfg = this.config.lights[i];
       const st = stateOf(this.hass, cfg.entity);
       const dead = isDead(st);
       const on = st?.state === "on";
-      if (on) onCount++;
 
       lampEl.dataset.on = String(on);
       lampEl.classList.toggle("unavailable", dead);
@@ -240,12 +251,12 @@ class LightCard extends DacCard {
 
       lampEl.querySelector(".nm").textContent = nameOf(this.hass, cfg.entity, cfg.name);
 
-      // An RGB lamp shows the colour it is actually making. That is worth more
-      // than any label: you see what you will get before you walk into the room.
+      // Een lamp die kleur maakt, toont die kleur. Dat is meer waard dan welk
+      // label ook: je ziet wat je krijgt voordat je de kamer in loopt.
       const rgb = on ? st?.attributes?.rgb_color : null;
       lampEl.style.setProperty(
         "--tone",
-        rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : this.toneFor(cfg)
+        rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : "var(--dac-lit)"
       );
 
       const ctl = lampEl.querySelector(".ctl");
@@ -258,7 +269,8 @@ class LightCard extends DacCard {
           kind === "range"
             ? `<div class="slider" style="--v:0%">
                  <span class="track"><span class="fill"></span></span>
-                 <input type="range" min="0" max="100" step="1" value="0" aria-label="Helderheid" />
+                 <input type="range" data-kind="brightness" min="0" max="100" step="1" value="0"
+                        aria-label="Helderheid" />
                </div>`
             : kind === "toggle"
               ? `<button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Aan of uit"></button>`
@@ -267,36 +279,77 @@ class LightCard extends DacCard {
 
       const vEl = lampEl.querySelector(".v");
 
-      if (kind === "range") {
-        if (this.dragging_.has(i)) return;
+      if (kind === "range" && !this.dragging_.has(`${i}:brightness`)) {
         const v = on ? pct(st.attributes.brightness) : 0;
         const input = ctl.querySelector("input");
-        if (document.activeElement !== input) input.value = String(v);
+        if (this.shadowRoot.activeElement !== input) input.value = String(v);
         ctl.querySelector(".slider").style.setProperty("--v", `${v}%`);
-        ctl.querySelector(".fill").style.setProperty("--v", `${v}%`);
-        vEl.textContent = dead ? "" : on ? `${v}%` : "uit";
+        vEl.textContent = on ? `${v}%` : "uit";
       } else if (kind === "toggle") {
         ctl.querySelector(".toggle")?.setAttribute("aria-checked", String(on));
         vEl.textContent = on ? "aan" : "uit";
-      } else {
+      } else if (kind === "none") {
         vEl.textContent = "niet bereikbaar";
       }
-    });
 
-    const sum = this.$(".sum");
-    if (sum) {
-      const total = this.config.lights.length;
-      sum.textContent = onCount === 0 ? "alles uit" : `${onCount} van ${total} aan`;
+      this.paintColour_(lampEl, st, on, i);
+    });
+  }
+
+  /** De kleurstrips: alleen wat de lamp kan, en alleen terwijl hij brandt. */
+  paintColour_(lampEl, st, on, i) {
+    const box = lampEl.querySelector(".colour");
+    const want = on && this.config.show_colour !== false && (hasColour(st) || hasTemp(st));
+    box.hidden = !want;
+    if (!want) return;
+
+    const sig = `${hasColour(st) ? "c" : ""}${hasTemp(st) ? "t" : ""}`;
+    if (box.dataset.sig !== sig) {
+      box.dataset.sig = sig;
+      const min = st.attributes.min_color_temp_kelvin ?? 2000;
+      const max = st.attributes.max_color_temp_kelvin ?? 6500;
+      box.innerHTML = `
+        ${
+          hasColour(st)
+            ? `<div class="lbl">Kleur</div>
+               <div class="slider" data-strip style="--strip:linear-gradient(90deg,
+                    hsl(0 90% 55%), hsl(60 90% 55%), hsl(120 90% 55%), hsl(180 90% 55%),
+                    hsl(240 90% 55%), hsl(300 90% 55%), hsl(360 90% 55%))">
+                 <span class="track"></span>
+                 <input type="range" data-kind="hue" min="0" max="360" step="1" value="0"
+                        aria-label="Kleur" />
+               </div>`
+            : ""
+        }
+        ${
+          hasTemp(st)
+            ? `<div class="lbl">Wit</div>
+               <div class="slider" data-strip style="--strip:linear-gradient(90deg,#ffb15e,#ffd6a8,#fff5e8,#eaf1ff,#cbdcff)">
+                 <span class="track"></span>
+                 <input type="range" data-kind="kelvin" min="${min}" max="${max}" step="50" value="${min}"
+                        aria-label="Kleurtemperatuur" />
+               </div>`
+            : ""
+        }`;
+    }
+
+    const hue = box.querySelector('[data-kind="hue"]');
+    if (hue && !this.dragging_.has(`${i}:hue`) && this.shadowRoot.activeElement !== hue) {
+      hue.value = String(Math.round(st.attributes.hs_color?.[0] ?? 0));
+    }
+    const kelvin = box.querySelector('[data-kind="kelvin"]');
+    if (kelvin && !this.dragging_.has(`${i}:kelvin`) && this.shadowRoot.activeElement !== kelvin) {
+      const k = st.attributes.color_temp_kelvin;
+      if (k != null) kelvin.value = String(k);
     }
   }
 
   getCardSize() {
-    return 1 + this.config.lights.length;
+    return this.config.lights?.length ?? 1;
   }
 
   getGridOptions() {
-    const rows = this.config.lights.length * 2 + (this.config.title ? 1 : 1);
-    return { columns: 12, rows, min_columns: 6, min_rows: 3 };
+    return { columns: 12, rows: "auto", min_columns: 6 };
   }
 
   static getConfigElement() {
@@ -305,46 +358,39 @@ class LightCard extends DacCard {
 
   static getStubConfig(hass, entities) {
     const light = entities?.find((e) => e.startsWith("light."));
-    return { lights: light ? [light] : [], title: "Verlichting" };
+    return light ? { entity: light } : {};
   }
 }
 
 class LightEditor extends DacEditor {
+  defaults() {
+    return { show_colour: true };
+  }
+
+  // Geen kleurkiezer: een brandende lamp draagt zijn eigen kleur, en uit is
+  // gedempt. Daar valt niets aan te kiezen dat de kaart beter maakt.
   pickers() {
-    return [
-      { key: "icon", kind: "icon", label: "Icoon (voor alle lampen)", fallback: "bulb" },
-      { key: "tone", kind: "tone", label: "Kleur als de lamp niet zelf kleurt" },
-    ];
+    return [{ key: "icon", kind: "icon", label: "Icoon", fallback: "bulb" }];
   }
 
   schema() {
     return [
-      { name: "lights", selector: { entity: { domain: "light", multiple: true } } },
-      { name: "title", selector: sel.text() },
-      section("Weergave", "mdi:eye", [
-        row(
-          { name: "show_summary", selector: sel.bool() },
-          { name: "bare", selector: sel.bool() }
-        ),
-      ]),
+      { name: "entity", selector: sel.entity("light") },
+      { name: "name", selector: sel.text() },
+      { name: "show_colour", selector: sel.bool() },
     ];
   }
 
   label(s) {
     return (
-      {
-        lights: "Lampen",
-        show_summary: "Aantal aan tonen",
-        bare: "Zonder kaartrand",
-      }[s.name] ?? super.label(s)
+      { entity: "Lamp", show_colour: "Kleurstrips tonen als de lamp aan is" }[s.name] ??
+      super.label(s)
     );
   }
 
   helper(s) {
-    if (s.name === "lights")
-      return "Dimbare lampen krijgen een schuif, schakelbare een tuimelaar. De kaart kijkt dat zelf op.";
-    if (s.name === "bare")
-      return "Zet de rand en achtergrond uit, zodat de kaart in een andere kaart past.";
+    if (s.name === "entity")
+      return "Eén lamp per kaart. Dimbaar krijgt een schuif, alleen schakelbaar een tuimelaar; kleur en kleurtemperatuur komen erbij als de lamp ze kan.";
     return undefined;
   }
 }
@@ -352,5 +398,5 @@ class LightEditor extends DacEditor {
 registerEditor("domotiapp-light-card-editor", LightEditor);
 registerCard("domotiapp-light-card", LightCard, {
   name: "DomotiApp Verlichting",
-  description: "Dimbare en schakelbare lampen in één kaart, met kleurweergave voor RGB.",
+  description: "Eén lamp: dimmen, kleur en kleurtemperatuur, precies wat de lamp kan.",
 });

@@ -1,56 +1,69 @@
 /**
- * Rolluiken, zonneschermen and anything else on a cover entity.
+ * Rolluiken, zonneschermen en alles wat op een cover-entiteit zit.
  *
- * Built for the common Dutch case first: a motor that takes open, stop and
- * close and reports nothing back. Home Assistant shows those as `unknown`
- * forever, and a card that insists on drawing a position slider for them is
- * showing a number nobody has. So the default is three buttons, and the state
- * line says plainly that the motor does not report back rather than pretending.
+ * Gebouwd voor het gewone Nederlandse geval: een motor die open, stop en dicht
+ * aanneemt en niets terugmeldt. Home Assistant houdt die eeuwig op `unknown`, en
+ * een kaart die daar dan "Onbekend" of "Geen terugkoppeling" onder zet, zet een
+ * regel neer die niets toevoegt. Dus staat er in dat geval helemaal geen
+ * statusregel -- alleen het icoon, dat meebeweegt met de knop die je indrukte.
  *
- * Position is offered when, and only when, the entity actually advertises
- * SET_POSITION. Same principle as the light card: ask the device, not the
- * installer. A customer who later fits a shutter that does report back gets the
- * slider without touching the dashboard.
+ * Dat laatste is bewust een aanname en geen meting. Je hebt zojuist "open"
+ * gedrukt, dus het rolluik gaat open; dat is het enige wat de kaart weet en het
+ * is precies wat je wilt zien. De knoppen worden er niet door gemarkeerd -- een
+ * aanname mag het icoon sturen, maar niet doen alsof er iets gemeten is. Meldt
+ * een motor wél terug, dan wint dat altijd van de aanname.
  *
- * Tilt gets the same treatment, because a venetian blind with tilt and no
- * position is a real and awkward combination.
+ * Een positieschuif verschijnt alleen wanneer de entiteit SET_POSITION
+ * adverteert. Zelfde principe als de lichtkaart: vraag het apparaat, niet de
+ * installateur.
  */
 
 import { DacCard, registerCard, registerEditor, toneValue, INCOMPLETE } from "../base.js";
-import { DacEditor, sel, row, section } from "../editor/base.js";
-import { icons, resolve, defaultIcon } from "../icons.js";
-import { attrsOf, bindActions, isUnavailable, moreInfo, nameOf, stateOf } from "../ha.js";
+import { DacEditor, sel, row } from "../editor/base.js";
+import { icons, resolve } from "../icons.js";
+import { attrsOf, bindActions, moreInfo, nameOf, stateOf } from "../ha.js";
 
-const F = { OPEN: 1, CLOSE: 2, SET_POSITION: 4, STOP: 8, SET_TILT: 128 };
+const F = { OPEN: 1, CLOSE: 2, SET_POSITION: 4, STOP: 8 };
 const can = (st, bit) => Boolean((st?.attributes?.supported_features ?? 0) & bit);
+
+/** Wat een rolluik draagt als de config niets zegt. */
+const defaultIcons = (attrs = {}) =>
+  attrs.device_class === "awning" || attrs.device_class === "blind"
+    ? { open: "awning", closed: "awning" }
+    : { open: "shutterOpen", closed: "shutter" };
 
 class CoverCard extends DacCard {
   static css = /* css */ `
     :host { display: block; }
 
-    .card { padding: 6px 14px 10px; }
+    .card { padding: 8px 14px; }
     :host([bare]) .card { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; }
 
-    .head { display: flex; align-items: baseline; gap: 10px; padding: 10px 0 4px; }
+    .head { display: flex; align-items: baseline; padding: 8px 0 2px; }
     .head b { font-size: 14px; font-weight: 600; }
-    .head .sum { margin-left: auto; font-size: 12px; color: var(--dac-ink-3); }
 
     .cv {
       display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center;
-      padding: 11px 0; min-height: var(--dac-row-h);
+      padding: 10px 0; min-height: var(--dac-row-h);
     }
     .cv + .cv, .group { border-top: 1px solid var(--dac-border); }
-    .group { padding-top: 11px; margin-top: 4px; }
 
-    .chip { width: 42px; height: 42px; cursor: pointer;
-            background: color-mix(in srgb, var(--tone) 13%, transparent);
-            border-color: color-mix(in srgb, var(--tone) 30%, transparent); }
+    .chip {
+      width: 42px; height: 42px; cursor: pointer;
+      background: color-mix(in srgb, var(--tone) 13%, transparent);
+      border-color: color-mix(in srgb, var(--tone) 30%, transparent);
+      transition: color 220ms ease, background 220ms ease, border-color 220ms ease;
+    }
     .chip .icon, .chip ha-icon { width: 20px; height: 20px; --mdc-icon-size: 20px; }
-    .cv[data-state="closed"] .chip { color: var(--dac-ink-3); background: rgba(255,255,255,.05); border-color: var(--dac-border); }
+    /* Dicht is een rusttoestand en hoort er ook zo uit te zien. */
+    .cv[data-shown="closed"] .chip {
+      color: var(--dac-ink-3); background: rgba(255,255,255,.05); border-color: var(--dac-border);
+    }
 
     .txt { min-width: 0; }
     .nm { font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .st { margin-top: 2px; font-size: 11.5px; color: var(--dac-ink-2); font-variant-numeric: tabular-nums; }
+    .st:empty { display: none; }
 
     /* ---- open / stop / dicht ---- */
     .keys {
@@ -68,16 +81,14 @@ class CoverCard extends DacCard {
     .keys button:active { background: rgba(255,255,255,.14); }
     .keys button .icon { width: 18px; height: 18px; }
     .keys button:disabled { opacity: .3; cursor: default; }
-
-    /* Only marked when the motor actually reports where it is. With an
-       assumed-state cover nothing is highlighted, because nothing is known. */
     .keys button[aria-pressed="true"] {
       background: color-mix(in srgb, var(--tone) 24%, transparent);
       color: var(--dac-ink);
     }
 
-    /* ---- position, when the entity has it ---- */
-    .pos { grid-column: 1 / -1; margin-top: 2px; }
+    /* ---- positie, alleen bij motoren die terugmelden ---- */
+    .pos { grid-column: 1 / -1; margin: 2px 0 4px; }
+    .pos[hidden] { display: none; }
     .slider { position: relative; height: 26px; }
     .slider .track { position: absolute; inset: 9px 0; border-radius: var(--dac-radius-pill);
                      background: rgba(255,255,255,.075); overflow: hidden; }
@@ -95,9 +106,7 @@ class CoverCard extends DacCard {
 
     .cv.unavailable { opacity: .42; pointer-events: none; }
 
-    @media (max-width: 380px) {
-      .keys button { width: 34px; }
-    }
+    @media (max-width: 380px) { .keys button { width: 34px; } }
   `;
 
   validate(config) {
@@ -130,7 +139,7 @@ class CoverCard extends DacCard {
     const rows = c.covers
       .map(
         (cv, i) => `
-      <div class="cv" data-i="${i}" data-state="unknown" style="--tone:${toneValue(cv.tone ?? c.tone, "solar")}">
+      <div class="cv" data-i="${i}" data-shown="open" style="--tone:${toneValue(cv.tone ?? c.tone, "solar")}">
         <button class="chip" type="button" aria-label="Meer info"></button>
         <div class="txt"><div class="nm"></div><div class="st"></div></div>
         ${this.keysHtml(c.show_stop !== false)}
@@ -143,17 +152,14 @@ class CoverCard extends DacCard {
       c.group && c.covers.length > 1
         ? `<div class="cv group" data-i="all" style="--tone:${toneValue(c.tone, "solar")}">
              <span class="chip" style="cursor:default">${icons.shutterOpen}</span>
-             <div class="txt"><div class="nm">Alles</div><div class="st"></div></div>
+             <div class="txt"><div class="nm">Alles</div></div>
              ${this.keysHtml(c.show_stop !== false)}
            </div>`
         : "";
 
-    const head =
-      c.title || c.show_summary
-        ? `<div class="head">${c.title ? `<b>${c.title}</b>` : ""}<span class="sum"></span></div>`
-        : "";
-
-    return `<div class="card surface">${head}${rows}${group}</div>`;
+    return `<div class="card surface">${
+      c.title ? `<div class="head"><b>${c.title}</b></div>` : ""
+    }${rows}${group}</div>`;
   }
 
   entitiesFor(i) {
@@ -164,16 +170,27 @@ class CoverCard extends DacCard {
 
   wire() {
     this.dragging_ = new Set();
+    // Wat we dénken dat een motor zonder terugkoppeling doet, per rij. Leeft
+    // alleen in dit tabblad -- er is niets om op de server te bewaren.
+    this.assumed_ = new Map();
 
     this.$$(".cv").forEach((cvEl) => {
       const i = cvEl.dataset.i;
 
       cvEl.querySelectorAll(".keys button").forEach((btn) => {
         btn.addEventListener("click", () => {
+          const act = btn.dataset.act;
           const map = { open: "open_cover", stop: "stop_cover", close: "close_cover" };
-          this.hass.callService("cover", map[btn.dataset.act], {
-            entity_id: this.entitiesFor(i),
-          });
+          this.hass.callService("cover", map[act], { entity_id: this.entitiesFor(i) });
+
+          if (act === "stop") return;
+          const shown = act === "open" ? "open" : "closed";
+          if (i === "all") {
+            this.config.covers.forEach((_, n) => this.assumed_.set(String(n), shown));
+          } else {
+            this.assumed_.set(i, shown);
+          }
+          this.paint();
         });
       });
 
@@ -181,10 +198,7 @@ class CoverCard extends DacCard {
 
       const entity = this.config.covers[+i].entity;
       this.teardown_.push(
-        bindActions(cvEl.querySelector(".chip"), {
-          onTap: () => moreInfo(this, entity),
-          onHold: () => moreInfo(this, entity),
-        })
+        bindActions(cvEl.querySelector(".chip"), { onTap: () => moreInfo(this, entity) })
       );
 
       const pos = cvEl.querySelector(".pos");
@@ -207,9 +221,6 @@ class CoverCard extends DacCard {
   }
 
   paint() {
-    let open = 0;
-    let known = 0;
-
     this.$$(".cv").forEach((cvEl) => {
       const i = cvEl.dataset.i;
       if (i === "all") return;
@@ -220,34 +231,37 @@ class CoverCard extends DacCard {
       const dead = !st || st.state === "unavailable";
       const state = st?.state ?? "unknown";
 
-      cvEl.dataset.state = state;
       cvEl.classList.toggle("unavailable", dead);
-
-      const chip = cvEl.querySelector(".chip");
-      const wanted = cfg.icon ?? this.config.icon ?? defaultIcon(cfg.entity, attrs);
-      if (chip.dataset.icon !== wanted) {
-        chip.dataset.icon = wanted;
-        chip.innerHTML = resolve(wanted, "shutter");
-      }
-
       cvEl.querySelector(".nm").textContent = nameOf(this.hass, cfg.entity, cfg.name);
 
-      // "Open" is countable whenever the cover says anything at all -- a
-      // position, or a plain open/closed. Counting only the ones with a
-      // position is how a card ends up claiming "1 van 1 open" next to four
-      // visible rolluiken.
       const hasPos = can(st, F.SET_POSITION) && attrs.current_position != null;
-      if (hasPos) {
-        known++;
-        if (attrs.current_position > 0) open++;
-      } else if (state === "open" || state === "closed") {
-        known++;
-        if (state === "open") open++;
+      const reports = hasPos || state === "open" || state === "closed";
+
+      // Welke van de twee iconen: wat de motor meldt, anders wat je zojuist
+      // indrukte, anders open als beginbeeld.
+      const shown = hasPos
+        ? attrs.current_position > 0
+          ? "open"
+          : "closed"
+        : state === "open" || state === "closed"
+          ? state
+          : (this.assumed_.get(i) ?? "open");
+      cvEl.dataset.shown = shown;
+
+      const fallback = defaultIcons(attrs);
+      const wanted =
+        (shown === "open" ? cfg.icon_open : cfg.icon_closed) ??
+        (shown === "open" ? this.config.icon_open : this.config.icon_closed) ??
+        cfg.icon ??
+        fallback[shown];
+      const chip = cvEl.querySelector(".chip");
+      if (chip.dataset.icon !== wanted) {
+        chip.dataset.icon = wanted;
+        chip.innerHTML = resolve(wanted, fallback[shown]);
       }
 
-      // The state line. When the motor reports nothing this says so once, in
-      // words, instead of showing "Onbekend" and leaving the customer to guess
-      // whether something is broken.
+      // Geen terugkoppeling betekent geen statusregel. Een zin die zegt dat er
+      // niets bekend is, is nog steeds een zin die de rij hoger maakt.
       const stEl = cvEl.querySelector(".st");
       if (!this.dragging_.has(i)) {
         stEl.textContent = dead
@@ -262,27 +276,20 @@ class CoverCard extends DacCard {
                   ? "Open"
                   : state === "closed"
                     ? "Dicht"
-                    : "Geen terugkoppeling";
+                    : "";
       }
 
-      // Buttons are only marked when the position is actually known.
-      const keys = cvEl.querySelectorAll(".keys button");
-      keys.forEach((b) => {
-        if (b.dataset.act === "stop") return;
+      cvEl.querySelectorAll(".keys button").forEach((b) => {
+        if (b.dataset.act === "stop") {
+          b.disabled = dead || !can(st, F.STOP);
+          return;
+        }
         const isOpenBtn = b.dataset.act === "open";
         const pressed =
-          !hasPos && (state === "open" || state === "closed")
-            ? (isOpenBtn && state === "open") || (!isOpenBtn && state === "closed")
-            : hasPos
-              ? (isOpenBtn && attrs.current_position === 100) ||
-                (!isOpenBtn && attrs.current_position === 0)
-              : false;
+          reports && ((isOpenBtn && shown === "open") || (!isOpenBtn && shown === "closed"));
         b.setAttribute("aria-pressed", String(pressed));
         b.disabled = dead || (isOpenBtn ? !can(st, F.OPEN) : !can(st, F.CLOSE));
       });
-
-      const stopBtn = cvEl.querySelector('[data-act="stop"]');
-      if (stopBtn) stopBtn.disabled = dead || !can(st, F.STOP);
 
       const pos = cvEl.querySelector(".pos");
       const wantPos = hasPos && this.config.show_position !== false;
@@ -299,33 +306,21 @@ class CoverCard extends DacCard {
         if (!this.dragging_.has(i)) {
           const v = attrs.current_position ?? 0;
           const input = pos.querySelector("input");
-          if (document.activeElement !== input) input.value = String(v);
+          if (this.shadowRoot.activeElement !== input) input.value = String(v);
           pos.querySelector(".slider").style.setProperty("--v", `${v}%`);
         }
       }
     });
-
-    const sum = this.$(".sum");
-    if (sum) {
-      const total = this.config.covers.length;
-      sum.textContent = !known
-        ? `${total} stuks`
-        : known < total
-          ? `${open} van ${known} bekend open`
-          : `${open} van ${total} open`;
-    }
-
-    const groupSt = this.$('.cv[data-i="all"] .st');
-    if (groupSt) groupSt.textContent = `${this.config.covers.length} tegelijk bedienen`;
   }
 
   getCardSize() {
-    return 1 + this.config.covers.length;
+    return this.config.covers?.length ?? 1;
   }
 
   getGridOptions() {
-    const rows = this.config.covers.length * 2 + (this.config.group ? 2 : 0) + 1;
-    return { columns: 12, rows, min_columns: 6, min_rows: 3 };
+    // "auto" laat Home Assistant de hoogte de inhoud volgen. Zelf rijen tellen
+    // leverde een kaart op die een flink stuk doorliep zonder inhoud.
+    return { columns: 12, rows: "auto", min_columns: 6 };
   }
 
   static getConfigElement() {
@@ -334,14 +329,19 @@ class CoverCard extends DacCard {
 
   static getStubConfig(hass, entities) {
     const cover = entities?.find((e) => e.startsWith("cover."));
-    return { covers: cover ? [cover] : [], title: "Rolluiken" };
+    return { covers: cover ? [cover] : [] };
   }
 }
 
 class CoverEditor extends DacEditor {
+  defaults() {
+    return { show_stop: true, show_position: true };
+  }
+
   pickers() {
     return [
-      { key: "icon", kind: "icon", label: "Icoon (voor alle rolluiken)", fallback: "shutter" },
+      { key: "icon_open", kind: "icon", label: "Icoon als het open staat", fallback: "shutterOpen" },
+      { key: "icon_closed", kind: "icon", label: "Icoon als het dicht is", fallback: "shutter" },
       { key: "tone", kind: "tone", label: "Kleur" },
     ];
   }
@@ -350,17 +350,7 @@ class CoverEditor extends DacEditor {
     return [
       { name: "covers", selector: { entity: { domain: "cover", multiple: true } } },
       { name: "title", selector: sel.text() },
-      section("Weergave", "mdi:eye", [
-        row(
-          { name: "show_stop", selector: sel.bool() },
-          { name: "group", selector: sel.bool() }
-        ),
-        row(
-          { name: "show_position", selector: sel.bool() },
-          { name: "show_summary", selector: sel.bool() }
-        ),
-        { name: "bare", selector: sel.bool() },
-      ]),
+      row({ name: "show_stop", selector: sel.bool() }, { name: "group", selector: sel.bool() }),
     ];
   }
 
@@ -370,16 +360,13 @@ class CoverEditor extends DacEditor {
         covers: "Rolluiken",
         show_stop: "Stopknop tonen",
         group: "Alles-tegelijk-regel",
-        show_position: "Schuif tonen als het kan",
-        show_summary: "Samenvatting tonen",
-        bare: "Zonder kaartrand",
       }[s.name] ?? super.label(s)
     );
   }
 
   helper(s) {
-    if (s.name === "show_position")
-      return "De schuif verschijnt alleen bij motoren die hun stand terugmelden. Doen ze dat niet, dan blijven het open, stop en dicht.";
+    if (s.name === "covers")
+      return "Melden ze hun stand terug, dan komt er vanzelf een schuif bij. Zo niet, dan blijven het open, stop en dicht, en volgt het icoon de knop die je indrukt.";
     return undefined;
   }
 }
@@ -387,5 +374,5 @@ class CoverEditor extends DacEditor {
 registerEditor("domotiapp-cover-card-editor", CoverEditor);
 registerCard("domotiapp-cover-card", CoverCard, {
   name: "DomotiApp Rolluiken",
-  description: "Open, stop en dicht. Een positieschuif alleen bij motoren die terugmelden.",
+  description: "Open, stop en dicht, met een eigen icoon voor open en dicht.",
 });

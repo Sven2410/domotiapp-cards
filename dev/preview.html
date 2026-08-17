@@ -72,11 +72,16 @@ const states = Object.fromEntries([
   S("person.bertus", "home", { friendly_name: "Bertus" }),
   S("person.dies", "unknown", { friendly_name: "Dies" }),
   S("sensor.sven_batt", "84", { friendly_name: "Batterij Sven" }),
+  S("weather.meteo", "partlycloudy", { friendly_name: "Meteo", uv_index: 3.2 }),
+  S("sensor.neerslagintensiteit", "0.4", {
+    friendly_name: "Neerslagintensiteit", unit_of_measurement: "mm/h" }),
 
   // Dimbaar, met kleur.
   S("light.ledstrip_sven", "on", {
     friendly_name: "Ledstrip Sven", brightness: 168,
-    supported_color_modes: ["rgb"], rgb_color: [255, 138, 60],
+    supported_color_modes: ["color_temp", "xy"], color_mode: "color_temp",
+    rgb_color: [255, 180, 110], hs_color: [28, 57],
+    color_temp_kelvin: 3000, min_color_temp_kelvin: 2000, max_color_temp_kelvin: 6535,
   }),
   // Dimbaar, uit.
   S("light.spots_sven", "off", {
@@ -190,33 +195,42 @@ const push = () => {
 };
 
 const COLUMNS = [
-  ["Header en secties", [
-    { type: "custom:domotiapp-header-card", weather: "weather.buienradar", sun: "sun.sun", person: "person.sven" },
-    { type: "custom:domotiapp-separator-card", name: "Favorieten", icon: "star", tone: "accent" },
-    { type: "custom:domotiapp-person-card", persons: ["person.sven","person.lieke","person.rinette","person.peter","person.bertus","person.dies"], show_summary: true },
-    { type: "custom:domotiapp-separator-card", name: "Woning", icon: "house", tone: "house", secondary_entity: "climate.woonkamer" },
+  ["Secties en personen", [
+    { type: "custom:domotiapp-separator-card", name: "Thuis", icon: "people", tone: "accent" },
+    { type: "custom:domotiapp-person-card", persons: ["person.sven","person.lieke","person.rinette","person.peter","person.bertus","person.dies"] },
+    { type: "custom:domotiapp-separator-card", name: "Woonkamer", icon: "house", tone: "house",
+      secondary_entity: "climate.woonkamer", secondary_icon: "thermo" },
   ]],
-  ["Knoppen", [
-    { type: "custom:domotiapp-button-card", entity: "input_boolean.slapen", icon: "moon", tone: "house" },
-    { type: "custom:domotiapp-button-card", entity: "scene.radio", icon: "radio", tone: "pink" },
-    { type: "custom:domotiapp-button-card", entity: "alarm_control_panel.alarm", icon: "shield", tone: "good" },
-    { type: "custom:domotiapp-button-card", name: "Begane grond", icon: "floorB", layout: "row",
-      tap_action: { action: "navigate", navigation_path: "#beganegrond" } },
-    { type: "custom:domotiapp-button-card", entity: "light.kapot", icon: "bulb" },
+  ["Verlichting, elk apart", [
+    { type: "custom:domotiapp-light-card", entity: "light.ledstrip_sven" },
+    { type: "custom:domotiapp-light-card", entity: "light.spots_sven" },
+    { type: "custom:domotiapp-light-card", entity: "light.groep_buiten" },
+    { type: "custom:domotiapp-light-card", entity: "light.kapot" },
   ]],
-  ["Verlichting en rolluiken", [
-    { type: "custom:domotiapp-light-card", title: "Slaapkamer Sven",
-      lights: ["light.ledstrip_sven", "light.spots_sven", "light.groep_buiten", "light.kapot"] },
-    { type: "custom:domotiapp-cover-card", title: "Woonkamer & keuken",
+  ["Rolluiken", [
+    { type: "custom:domotiapp-cover-card",
       covers: ["cover.wk_achter", "cover.keuken_voor", "cover.zonnescherm_woonkamer", "cover.garagedeur"],
       group: true },
   ]],
-  ["Afval", [
-    { type: "custom:domotiapp-waste-card", title: "Afvalkalender",
+  ["Knoppen en afval", [
+    { type: "custom:domotiapp-button-card", entity: "input_boolean.slapen", icon: "moon", tone: "house" },
+    { type: "custom:domotiapp-button-card", entity: "scene.radio", icon: "radio", tone: "pink" },
+    { type: "custom:domotiapp-waste-card",
       sensors: ["sensor.mijnafvalwijzer_pmd","sensor.mijnafvalwijzer_gft","sensor.mijnafvalwijzer_papier","sensor.mijnafvalwijzer_restafval"] },
-    { type: "custom:domotiapp-separator-card", name: "Tegels", icon: "grid", tone: "teal" },
   ]],
 ];
+
+// De header hoort over de volle breedte, dus die staat boven het raster.
+{
+  const full = document.createElement("div");
+  full.style.cssText = "margin-bottom:22px";
+  const h = document.createElement("h2"); h.textContent = "Header (volle breedte, verbergt onder 768px)";
+  h.style.marginBottom = "8px";
+  full.append(h, make({ type: "custom:domotiapp-header-card", weather: "weather.buienradar",
+    weather_uv: "weather.meteo", sun: "sun.sun", person: "person.sven",
+    precipitation_entity: "sensor.neerslagintensiteit", hide_below: 0 }));
+  document.querySelector(".wrap").insertBefore(full, document.getElementById("cols"));
+}
 
 const cols = document.getElementById("cols");
 for (const [title, configs] of COLUMNS) {

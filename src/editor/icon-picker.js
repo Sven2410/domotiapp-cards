@@ -25,7 +25,7 @@ const GROUPS = [
   ["Apparaten", ["tv", "speaker", "camera", "car", "washer", "dishwasher", "printer", "fan", "airco", "radio"]],
   ["Afval", ["bin", "binWheeled", "calendar"]],
   ["Weer", ["sun", "cloud", "cloudSun", "rain", "snow", "fog", "wind", "drop", "uv", "sunrise", "sunset", "thermo"]],
-  ["Status", ["shield", "lock", "lockOpen", "key", "wifi", "smoke", "warning", "check", "close", "clock"]],
+  ["Status", ["shield", "lock", "lockOpen", "key", "wifi", "smoke", "warning", "check", "close", "clock", "gaugeArrow"]],
   ["Overig", ["star", "moon", "leaf", "cog", "dots", "plus", "minus", "chevronRight", "chevronDown", "question"]],
 ];
 
@@ -201,7 +201,14 @@ class DacIconPicker extends HTMLElement {
       .querySelectorAll(".opt")
       .forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.icon === v)));
 
+    // Never write into the field while somebody is typing in it.
+    //
+    // Home Assistant pushes a fresh hass object at the editor on every state
+    // change in the house, and the editor syncs its pickers each time. Without
+    // this guard every one of those wipes the half-typed `mdi:` name, which
+    // reads as "I cannot type in this field at all".
     const input = this.$("#mdi");
+    if (this.shadowRoot.activeElement === input) return;
     const mdi = v && v.includes(":") ? v : "";
     if (input.value !== mdi) input.value = mdi;
   }
