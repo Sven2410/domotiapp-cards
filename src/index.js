@@ -17,7 +17,7 @@
  * happens inside each card's own file, next to the class it registers.
  */
 
-export const VERSION = "0.1.4";
+export const VERSION = "0.1.5";
 
 import "./cards/header-card.js";
 import "./cards/separator-card.js";
