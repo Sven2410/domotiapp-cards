@@ -17,6 +17,18 @@ export const stateOf = (hass, entityId) =>
 
 export const attrsOf = (hass, entityId) => stateOf(hass, entityId)?.attributes ?? {};
 
+/**
+ * De eigen afbeelding van een entiteit, of null.
+ *
+ * Een clublogo, een profielfoto, het merk van een integratie: dat is wat de
+ * entiteit zelf meebrengt, en het is specifieker dan het icoon dat het domein
+ * oplevert. Alleen een icoon dat jij zelf koos wint er nog van -- vandaar dat
+ * `chosenIcon` hier binnenkomt in plaats van bij elke kaart apart getoetst te
+ * worden. Wie een icoon kiest wil dat icoon, niet een logo eroverheen.
+ */
+export const pictureOf = (hass, entityId, chosenIcon) =>
+  chosenIcon ? null : attrsOf(hass, entityId).entity_picture || null;
+
 /** The name to show: what the config said, else the entity's own. */
 export function nameOf(hass, entityId, configured) {
   if (configured) return configured;

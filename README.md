@@ -144,7 +144,12 @@ staat.
 - **Entiteiten** met een eigen afbeelding — een clublogo, een profielfoto, het merk
   van een integratie — tonen die in plaats van een icoon, tenzij je zelf een icoon
   kiest. Specifieker wint: wat jij kiest gaat voor wat de entiteit meebrengt, en
-  dat gaat voor wat het domein oplevert.
+  dat gaat voor wat het domein oplevert. Dat geldt op de entiteiten- én de
+  knopkaart.
+- **De editor van de entiteitenkaart** werkt per rij, en elke rij klapt dicht. Wat
+  je van een entiteit instelt — naam, icoon, kleur, toestand tonen, tikgedrag —
+  staat onder die entiteit, niet in een tweede lijst eronder. Een verse kaart
+  opent met één knop: rij toevoegen.
 
 ---
 

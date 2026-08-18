@@ -105,6 +105,17 @@ export const baseCss = /* css */ `
     border: 1px solid color-mix(in srgb, var(--tone) 32%, transparent);
   }
 
+  /* Draagt de entiteit een eigen afbeelding -- een clublogo, een profielfoto,
+     het merk van een integratie -- dan vult die de chip helemaal. Een logo in
+     een hoekje van 18 pixels is geen logo meer. De rand blijft staan, zodat de
+     vorm klopt met de iconen ernaast. */
+  .chip.pic {
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--dac-border);
+  }
+  .chip.pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
   .icon { display: block; }
 
   /* Safari on iOS leaves a tapped element focused and draws a heavy ring around

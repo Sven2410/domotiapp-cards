@@ -19,6 +19,11 @@
  * toestand" stond hier ook, maar dat is geen keuze -- een knop die er hetzelfde
  * uitziet of het apparaat nu aan of uit staat, is een kapotte knop.
  *
+ * Draagt de entiteit een eigen afbeelding -- een clublogo, een profielfoto, het
+ * merk van een integratie -- dan staat die in de chip in plaats van een icoon.
+ * Zelf een icoon kiezen wint nog steeds: wat jij kiest is specifieker dan wat de
+ * entiteit meebrengt, en dat is weer specifieker dan wat het domein oplevert.
+ *
  * Een kaart zonder entiteit mag en is nuttig: dat is een navigatieknop.
  */
 
@@ -35,6 +40,7 @@ import {
   isStateless,
   localizeState,
   nameOf,
+  pictureOf,
   runAction,
   stateOf,
 } from "../ha.js";
@@ -212,14 +218,21 @@ class ButtonCard extends DacCard {
 
     const chip = this.$(".chip");
     if (chip) {
-      const wanted = c.icon || defaultIcon(c.entity, attrsOf(this.hass, c.entity));
+      const pic = pictureOf(this.hass, c.entity, c.icon);
+      const wanted = pic
+        ? `pic:${pic}`
+        : c.icon || defaultIcon(c.entity, attrsOf(this.hass, c.entity));
       if (chip.dataset.icon !== wanted) {
         chip.dataset.icon = wanted;
-        chip.innerHTML = resolve(wanted);
+        chip.classList.toggle("pic", Boolean(pic));
+        chip.innerHTML = pic
+          ? `<img src="${pic}" alt="" loading="lazy" />`
+          : resolve(wanted);
       }
       // Uit is een echte toestand en hoort er ook zo uit te zien: de chip wordt
-      // stil in plaats van zijn kleur te houden.
-      chip.style.setProperty("--tone", on ? this.tone_() : "var(--dac-ink-3)");
+      // stil in plaats van zijn kleur te houden. Een afbeelding draagt haar
+      // eigen kleuren en hoeft niet mee te kleuren.
+      chip.style.setProperty("--tone", on && !pic ? this.tone_() : "var(--dac-ink-3)");
       chip.setAttribute(
         "aria-label",
         c.entity ? `${nameOf(this.hass, c.entity, c.name)} schakelen` : "Icoon"

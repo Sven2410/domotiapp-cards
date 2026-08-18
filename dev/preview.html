@@ -252,6 +252,9 @@ const COLUMNS = [
       { entity: "alarm_control_panel.alarm", name: "blijft werken" } ] },
   ]],
   ["Knoppen en afval", [
+    // Zonder icoon in de config, zodat de eigen afbeelding van de entiteit aan
+    // bod komt -- precies wat er in Home Assistant ontbrak.
+    { type: "custom:domotiapp-button-card", entity: "sensor.eredivisie" },
     { type: "custom:domotiapp-button-card", entity: "input_boolean.slapen", icon: "moon", tone: "house" },
     { type: "custom:domotiapp-button-card", entity: "scene.radio", icon: "radio", tone: "pink" },
     { type: "custom:domotiapp-waste-card",
@@ -302,6 +305,54 @@ for (const t of [
   { entity: "scene.radio", name: "Radio", icon: "radio", tone: "pink", layout: "compact" },
 ]) compact.appendChild(make({ type: "custom:domotiapp-button-card", ...t }));
 cols.lastElementChild.appendChild(compact);
+
+/* ------------------------------------------------------------------ editors */
+
+/**
+ * De editor hoort ook op de werkbank.
+ *
+ * Hij was hier niet te zien, en dus werd het deel dat je het vaakst gebruikt
+ * alleen in Home Assistant zelf getest -- met een herlaadcyclus van een minuut.
+ */
+function editor(titel, tag, config) {
+  const h = document.createElement("h2");
+  h.textContent = titel;
+
+  const doos = document.createElement("div");
+  doos.style.cssText =
+    "background:#151513;border:1px solid rgba(232,228,222,.14);border-radius:14px;padding:14px";
+
+  const ed = document.createElement(tag);
+  ed.hass = snapshot();
+  ed.setConfig(config);
+  ed.addEventListener("config-changed", (e) => {
+    e.stopPropagation();
+    uit.textContent = JSON.stringify(e.detail.config, null, 1);
+  });
+
+  const uit = document.createElement("pre");
+  uit.style.cssText =
+    "margin:10px 0 0;font:11px/1.45 ui-monospace,monospace;color:#8fb9d6;white-space:pre-wrap";
+  uit.textContent = JSON.stringify(config, null, 1);
+
+  doos.append(ed, uit);
+  const col = document.createElement("div");
+  col.className = "col";
+  col.append(h, doos);
+  return col;
+}
+
+cols.append(
+  editor("Editor — nieuwe kaart", "domotiapp-entities-card-editor", { rows: [] }),
+  editor("Editor — bestaande kaart", "domotiapp-entities-card-editor", {
+    rows: [
+      { columns: 1, items: [{ entity: "sensor.eredivisie" }] },
+      { columns: 3, items: [
+        { entity: "light.spots_sven", name: "Spots", icon: "bulb" },
+        { entity: "scene.radio", tone: "pink" } ] },
+    ],
+  })
+);
 
 window.addEventListener("error", (e) => log(`FOUT: ${e.message}`, "err"));
 window.addEventListener("unhandledrejection", (e) => log(`FOUT: ${e.reason}`, "err"));

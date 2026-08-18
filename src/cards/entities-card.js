@@ -30,6 +30,7 @@ import {
   isStateless,
   localizeState,
   nameOf,
+  pictureOf,
   runAction,
   stateOf,
 } from "../ha.js";
@@ -84,17 +85,11 @@ class EntitiesCard extends DacCard {
     }
     .it:hover { background: var(--dac-surface); }
 
-    .chip { width: 36px; height: 36px; flex: 0 0 auto; overflow: hidden; }
+    .chip { width: 36px; height: 36px; flex: 0 0 auto; }
     .chip .icon, .chip ha-icon { width: 18px; height: 18px; --mdc-icon-size: 18px; }
     .it[data-on="true"] .chip {
       box-shadow: 0 0 12px -3px color-mix(in srgb, var(--tone) 55%, transparent);
     }
-
-    /* Een eigen afbeelding vult de chip helemaal: een clublogo in een hoekje
-       van 18 pixels is geen logo meer. De rand blijft, zodat de vorm klopt met
-       de iconen ernaast. */
-    .chip.pic { background: rgba(255,255,255,.06); border-color: var(--dac-border); }
-    .chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
     .txt { min-width: 0; display: flex; flex-direction: column; }
     .nm {
@@ -201,7 +196,7 @@ class EntitiesCard extends DacCard {
       // Zelf gekozen icoon wint. Anders de eigen afbeelding van de entiteit,
       // en pas als die er niet is het icoon van het domein.
       const chip = el.querySelector(".chip");
-      const pic = !item.icon ? st?.attributes?.entity_picture : null;
+      const pic = pictureOf(this.hass, item.entity, item.icon);
       const wanted = item.icon || (pic ? `pic:${pic}` : defaultIcon(item.entity, attrsOf(this.hass, item.entity)));
       if (chip.dataset.icon !== wanted) {
         chip.dataset.icon = wanted;
@@ -256,8 +251,15 @@ class EntitiesCard extends DacCard {
     return document.createElement("domotiapp-entities-card-editor");
   }
 
-  static getStubConfig(hass, entities) {
-    return { rows: [{ columns: 2, items: (entities ?? []).slice(0, 2).map((e) => ({ entity: e })) }] };
+  /**
+   * Een verse kaart wijst nergens naar.
+   *
+   * Er stonden twee willekeurige entiteiten in, en dat las als een kaart die al
+   * iets doet terwijl er niets gekozen was -- je moest eerst opruimen voordat je
+   * kon beginnen. Nu opent de editor met één knop: rij toevoegen.
+   */
+  static getStubConfig() {
+    return { rows: [] };
   }
 }
 

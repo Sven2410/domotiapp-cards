@@ -75,6 +75,22 @@ class HaFormStub extends HTMLElement {
         veld.addEventListener("change", () =>
           this.emit_(s.name, veld.value.split(",").map((x) => x.trim()).filter(Boolean))
         );
+      } else if (sel.entity) {
+        // Eén entiteit: het echte ding is een zoekveld, hier een keuzelijst uit
+        // de nagemaakte staten. Genoeg om een editor te kunnen bedienen.
+        veld = document.createElement("select");
+        const leeg = document.createElement("option");
+        leeg.value = "";
+        leeg.textContent = "—";
+        veld.appendChild(leeg);
+        for (const id of Object.keys(this.hass_?.states ?? {})) {
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = id;
+          veld.appendChild(opt);
+        }
+        veld.value = this.data_?.[s.name] ?? "";
+        veld.addEventListener("change", () => this.emit_(s.name, veld.value || undefined));
       } else if (sel.select) {
         veld = document.createElement("select");
         for (const o of sel.select.options ?? []) {
