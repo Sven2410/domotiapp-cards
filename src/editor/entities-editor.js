@@ -29,14 +29,27 @@
  *
  * DE VAL DIE HIER STOND, EN WAAROM ALLES ERAAN HING
  *
- * `ha-form` houdt zijn eigen waarde niet bij. Het tekent wat er in `data` staat
- * en meldt terug wat je wijzigde; schrijft de editor die wijziging niet terug,
- * dan tekent het veld bij de eerstvolgende ronde weer de oude waarde. Naam,
- * status en de acties leken daardoor domweg niet te werken -- je typte, het veld
- * sprong terug, en de helft van wat je instelde bereikte de kaart nooit. De
- * andere editors in deze familie doen dat terugschrijven wel (`DacEditor.sync_`);
- * deze deed het niet. Daarom staat er nu per blok een `vernieuw()` die alle
- * velden opnieuw uit het item vult, en draait `emit_()` ze allemaal.
+ * Home Assistant BEVRIEST de config die je hem geeft. `hui-dialog-edit-card`
+ * doet `deepFreeze(ev.detail.config)` op precies het object dat wij meesturen --
+ * en daar zaten onze eigen item-objecten in, want `filter()` maakt wel een
+ * nieuwe lijst maar geen nieuwe items. Vanaf de tweede wijziging was elke
+ * `item.name = ...` dus een `TypeError: Cannot add property name, object is not
+ * extensible`. De eerste wijziging kwam aan, de rest liep dood in een stille
+ * fout: één letter in het naamveld, één icoon dat bleef hangen, een schakelaar
+ * die terugsprong. Daarom geeft `emit_()` nu kopieën weg en houden we onze eigen
+ * objecten voor onszelf.
+ *
+ * En Home Assistant duwt die config bij ELKE toetsaanslag terug via `setConfig`
+ * (`hui-element-editor._handleUIConfigChanged` -> `value` -> `setConfig`). Zou
+ * de editor daarop opnieuw opbouwen, dan verdwijnt het invoerveld onder je
+ * vingers en komt alleen de eerste letter aan. Vandaar de echo-herkenning
+ * hieronder: eerst op identiteit, want HA geeft letterlijk hetzelfde object
+ * terug, en anders op inhoud.
+ *
+ * Wat NIET nodig is: de velden terugschrijven. `ha-form` houdt zijn eigen `data`
+ * bij (`this.data = {...this.data, ...newValue}`) en onze twee kiezers doen dat
+ * ook. Alleen de koppen -- de samenvatting van een dichtgeklapte rij -- moeten
+ * bijgewerkt worden, en die schrijven in niets waar iemand in staat te typen.
  */
 
 import "./icon-picker.js";
@@ -90,10 +103,20 @@ function toRows(config) {
   return uit;
 }
 
-/** Wat er werkelijk naar de dashboardconfig gaat: geen lege plekken, geen lege rijen. */
+/**
+ * Wat er werkelijk naar de dashboardconfig gaat: geen lege plekken, geen lege
+ * rijen, en nergens een object dat wij daarna nog aanraken.
+ *
+ * Die laatste is geen netheid maar de kern. Home Assistant bevriest wat het
+ * krijgt; deelden we onze eigen items uit, dan zouden ze na één wijziging
+ * onaanraakbaar zijn. Zie de kop.
+ */
 const uitgekleed = (rows) =>
   rows
-    .map((r) => ({ columns: r.columns, items: r.items.filter((i) => i.entity) }))
+    .map((r) => ({
+      columns: r.columns,
+      items: r.items.filter((i) => i.entity).map((i) => structuredClone(i)),
+    }))
     .filter((r) => r.items.length);
 
 const CSS = `
@@ -199,8 +222,10 @@ class EntitiesEditor extends HTMLElement {
     // Welke blokken openstaan, op sleutel `r2` en `r2i0`. Een herbouw mag niet
     // dichtslaan wat je net had opengeklapt.
     this.open_ = new Set();
-    // Per blok een functie die zijn velden opnieuw uit het item vult. Zie de kop.
-    this.syncs_ = [];
+    // Per blok een functie die zijn kop bijwerkt. Alleen de koppen: de velden
+    // houden zichzelf bij, en erin schrijven terwijl iemand typt is vragen om
+    // een cursor die wegspringt. Zie de kop van dit bestand.
+    this.koppen_ = [];
   }
 
   setConfig(config) {
@@ -210,12 +235,17 @@ class EntitiesEditor extends HTMLElement {
     delete this.rest_.entities;
     delete this.rest_.columns;
 
-    const binnen = toRows(config);
+    // Onze eigen wijziging die via Home Assistant terugkomt, bij ELKE
+    // toetsaanslag. Zou die een herbouw uitlokken, dan verdwijnt het veld waar
+    // je in typt onder je vingers en komt alleen de eerste letter aan.
+    //
+    // Eerst op identiteit: Home Assistant geeft letterlijk hetzelfde object
+    // terug dat wij meestuurden (alleen bevroren). Dat is de betrouwbaarste
+    // toets die er is. De inhoudsvergelijking eronder vangt de gevallen waarin
+    // er onderweg toch een kopie van gemaakt is.
+    if (this.gebouwd_ && config === this.uitObject_) return;
 
-    // Onze eigen wijziging die via Home Assistant terugkomt. Zou die een
-    // herbouw uitlokken, dan verdwijnt bij elke aanslag het veld waar je in
-    // typt -- en de lege plek waar je net een entiteit in wilde kiezen ook,
-    // want die staat niet in de weggeschreven config.
+    const binnen = toRows(config);
     if (this.gebouwd_ && JSON.stringify(uitgekleed(binnen)) === this.uit_) return;
 
     this.rows_ = binnen;
@@ -305,7 +335,7 @@ class EntitiesEditor extends HTMLElement {
     await customElements.whenDefined("ha-form");
     this.gebouwd_ = true;
     this.replaceChildren();
-    this.syncs_ = [];
+    this.koppen_ = [];
 
     const style = document.createElement("style");
     style.textContent = CSS;
@@ -409,7 +439,7 @@ class EntitiesEditor extends HTMLElement {
         b.setAttribute("aria-pressed", String(row.columns === Number(b.textContent)))
       );
     };
-    this.syncs_.push(vernieuwKop);
+    this.koppen_.push(vernieuwKop);
 
     const weg = document.createElement("button");
     weg.type = "button";
@@ -557,35 +587,34 @@ class EntitiesEditor extends HTMLElement {
       this.emit_();
     });
 
-    /**
-     * Alle velden opnieuw uit het item vullen.
-     *
-     * Dit is het terugschrijven waar de kop over gaat. Zonder deze regel tekent
-     * `ha-form` bij de volgende ronde weer de waarde van vóór jouw wijziging.
-     */
-    const vernieuw = () => {
+    // De kop: die mag bij elke wijziging opnieuw, want er staat niemand in te
+    // typen. Naam en entiteit erin veranderen terwijl je ze invult.
+    const vernieuwKop = () => {
       naam.textContent = item.entity ? this.itemNaam_(item) : "Kies een entiteit";
       sub.textContent = item.entity || "";
       det.dataset.leeg = String(!item.entity);
       weg.hidden = !item.entity;
-
-      kiezer.data = { entity: item.entity || undefined };
-      icoon.value = item.icon ?? "";
-      kleur.value = item.tone ?? "";
-      rest.data = {
-        name: item.name ?? "",
-        show_state: item.show_state ?? true,
-        icon_tap_action: item.icon_tap_action,
-        icon_hold_action: item.icon_hold_action,
-        tap_action: item.tap_action,
-        hold_action: item.hold_action,
-      };
     };
-    this.syncs_.push(vernieuw);
+    this.koppen_.push(vernieuwKop);
+
+    // De velden: één keer vullen, bij het opbouwen. Daarna houden ze zichzelf
+    // bij -- `ha-form` en allebei de kiezers doen dat -- en erin schrijven
+    // terwijl iemand typt zou de cursor laten wegspringen.
+    kiezer.data = { entity: item.entity || undefined };
+    icoon.value = item.icon ?? "";
+    kleur.value = item.tone ?? "";
+    rest.data = {
+      name: item.name ?? "",
+      show_state: item.show_state ?? true,
+      icon_tap_action: item.icon_tap_action,
+      icon_hold_action: item.icon_hold_action,
+      tap_action: item.tap_action,
+      hold_action: item.hold_action,
+    };
 
     body.append(kiezer, icoon, kleur, rest);
     det.append(sum, body);
-    vernieuw();
+    vernieuwKop();
     return det;
   }
 
@@ -593,14 +622,17 @@ class EntitiesEditor extends HTMLElement {
 
   emit_() {
     const rows = uitgekleed(this.rows_);
+    const config = { ...this.rest_, rows };
+
     // Onthouden wat we wegschreven, zodat we onze eigen echo herkennen.
     this.uit_ = JSON.stringify(rows);
+    this.uitObject_ = config;
 
-    for (const sync of this.syncs_) sync();
+    for (const kop of this.koppen_) kop();
 
     this.dispatchEvent(
       new CustomEvent("config-changed", {
-        detail: { config: { ...this.rest_, rows } },
+        detail: { config },
         bubbles: true,
         composed: true,
       })

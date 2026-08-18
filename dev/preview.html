@@ -317,10 +317,28 @@ cols.lastElementChild.appendChild(compact);
 /* ------------------------------------------------------------------ editors */
 
 /**
- * De editor hoort ook op de werkbank.
+ * Bevries als Home Assistant.
  *
- * Hij was hier niet te zien, en dus werd het deel dat je het vaakst gebruikt
- * alleen in Home Assistant zelf getest -- met een herlaadcyclus van een minuut.
+ * `hui-dialog-edit-card` doet letterlijk `deepFreeze(ev.detail.config)` op het
+ * object dat de editor meestuurt. Een editor die zijn eigen objecten weggeeft
+ * kan ze daarna niet meer aanraken -- en dat was precies de fout die hier niet
+ * omviel omdat de werkbank netjes bleef. Nu wel.
+ */
+function bevries(o) {
+  if (o && typeof o === "object" && !Object.isFrozen(o)) {
+    Object.freeze(o);
+    for (const v of Object.values(o)) bevries(v);
+  }
+  return o;
+}
+
+/**
+ * De editor hoort ook op de werkbank, met dezelfde lus als in Home Assistant.
+ *
+ * HA duwt de weggeschreven config bij ELKE wijziging terug via `setConfig`
+ * (`hui-element-editor._handleUIConfigChanged` -> `value` -> `setConfig`). Zonder
+ * die echo hier test je de helft: alles wat misgaat bij het terugkomen --
+ * herbouwen onder een typend mens, bevroren objecten -- blijft dan onzichtbaar.
  */
 function editor(titel, tag, config) {
   const h = document.createElement("h2");
@@ -332,10 +350,12 @@ function editor(titel, tag, config) {
 
   const ed = document.createElement(tag);
   ed.hass = snapshot();
-  ed.setConfig(config);
+  ed.setConfig(bevries(structuredClone(config)));
   ed.addEventListener("config-changed", (e) => {
     e.stopPropagation();
-    uit.textContent = JSON.stringify(e.detail.config, null, 1);
+    const cfg = bevries(e.detail.config);
+    uit.textContent = JSON.stringify(cfg, null, 1);
+    ed.setConfig(cfg);
   });
 
   const uit = document.createElement("pre");
