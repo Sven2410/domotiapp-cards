@@ -15,6 +15,11 @@
  *
  * Alleen het icoon draagt de toestand. Een raster van zes oplichtende vlakken is
  * geen lijst meer maar een lichtkrant.
+ *
+ * Het icoon en de regel zijn twee knoppen, net als op de knopkaart. Op het icoon
+ * tikken schakelt, op de regel tikken doet wat jij instelt -- meestal openen of
+ * navigeren. Dat is het verschil tussen een lijst die je kunt bedienen en een
+ * lijst waar je alleen naar kunt kijken.
  */
 
 import { DacCard, registerCard, registerEditor, rowsFor, toneValue, TONES, INCOMPLETE } from "../base.js";
@@ -85,7 +90,11 @@ class EntitiesCard extends DacCard {
     }
     .it:hover { background: var(--dac-surface); }
 
-    .chip { width: 36px; height: 36px; flex: 0 0 auto; }
+    .chip {
+      width: 36px; height: 36px; flex: 0 0 auto; cursor: pointer;
+      transition: color 200ms ease, background 200ms ease,
+                  border-color 200ms ease, box-shadow 200ms ease;
+    }
     .chip .icon, .chip ha-icon { width: 18px; height: 18px; --mdc-icon-size: 18px; }
     .it[data-on="true"] .chip {
       box-shadow: 0 0 12px -3px color-mix(in srgb, var(--tone) 55%, transparent);
@@ -150,7 +159,7 @@ class EntitiesCard extends DacCard {
           .map(
             (_, i) => `
           <div class="it" role="button" tabindex="0" data-r="${r}" data-i="${i}">
-            <span class="chip"></span>
+            <span class="chip" role="button" tabindex="0"></span>
             <span class="txt"><span class="nm"></span><span class="st"></span></span>
           </div>`
           )
@@ -169,12 +178,25 @@ class EntitiesCard extends DacCard {
       const fire = (which, fallback) =>
         runAction(this, this.hass, item, item[which] ?? fallback);
 
+      // De regel opent, het icoon schakelt -- dezelfde verdeling als op de
+      // knopkaart, zodat een dashboard één gewoonte heeft in plaats van twee.
       this.teardown_.push(
         bindActions(el, {
-          onTap: () => fire("tap_action", defaultTapAction(item.entity)),
+          onTap: () => fire("tap_action", { action: "more-info" }),
           onHold: () => fire("hold_action", { action: "more-info" }),
         })
       );
+
+      const chip = el.querySelector(".chip");
+      this.teardown_.push(
+        bindActions(chip, {
+          onTap: () => fire("icon_tap_action", defaultTapAction(item.entity)),
+          onHold: () => fire("icon_hold_action", { action: "more-info" }),
+        })
+      );
+      // Anders telt een tik op het icoon ook als een tik op de regel.
+      this.on(chip, "click", (e) => e.stopPropagation());
+      this.on(chip, "pointerdown", (e) => e.stopPropagation());
     });
   }
 
@@ -210,6 +232,7 @@ class EntitiesCard extends DacCard {
 
       const name = nameOf(this.hass, item.entity, item.name);
       this.text(el.querySelector(".nm"), name);
+      chip.setAttribute("aria-label", `${name} schakelen`);
 
       const stEl = el.querySelector(".st");
       const toon = item.show_state ?? this.config.show_state;

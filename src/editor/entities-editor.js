@@ -7,18 +7,19 @@
  * nog te volgen; bij zes stond je te tellen welk vierde blok bij welke vierde
  * regel hoorde. Wat je instelt hoort te staan waar het over gaat, dus zit nu
  * elke entiteit in een eigen uitklapblok met zijn eigen kiezer, naam, icoon,
- * kleur en tikgedrag erin.
+ * kleur, status en tikgedrag erin.
  *
  * En een rij zelf klapt ook dicht. Dat is niet alleen netjes: het is het enige
  * dat een kaart van vier rijen met elf entiteiten nog te overzien houdt. Je
  * klapt de rij dicht waar je klaar mee bent en begint aan de volgende. Vandaar
  * ook dat een verse kaart met niets meer opent dan één knop: rij toevoegen.
  *
- * Het kolomaantal bepaalt hoeveel plekken een rij heeft. Zet je hem op drie, dan
- * staan er drie plekken klaar om te vullen. Zet je hem daarna terug op twee, dan
- * blijft wat je al ingevuld had gewoon staan -- een instelling die je werk
- * weggooit is geen instelling maar een valstrik. De kaart laat de derde dan
- * onder de eerste twee doorlopen.
+ * Het kolomaantal ís het aantal plekken. Twee kolommen is twee entiteiten, niet
+ * twee entiteiten naast elkaar met een derde eronder -- dat laatste is wat een
+ * tweede rij is. Daarom staat er geen "entiteit toevoegen" meer: de plekken
+ * staan er al, en er is er nooit één meer dan er kolommen zijn. Wat er bij het
+ * verlagen niet meer past wordt binnen deze sessie bewaard, zodat je van drie
+ * naar twee en terug kunt zonder je werk kwijt te zijn.
  *
  * Dit is de enige editor in de familie die niet één `ha-form` is, en dat is geen
  * luxe. De config is genest -- rijen met items met eigen instellingen -- en
@@ -26,16 +27,16 @@
  * sleutels (`naam:light.x`), maar dat werkt alleen zolang er één lijst is. Bij
  * twee rijen die dezelfde entiteit mogen bevatten loopt die truc vast.
  *
- * Waar Home Assistant het beter weet, gebruiken we hem: de entiteitkiezer met
- * zijn zoekfunctie en de actie-editor met elke service in huis. Wat wij zelf
- * beter kunnen -- de icoonkiezer met de getekende set, het kleurenpalet -- staat
- * ernaast.
+ * DE VAL DIE HIER STOND, EN WAAROM ALLES ERAAN HING
  *
- * Er wordt alleen herbouwd als de structuur verandert. Bij het typen van een
- * naam niet: dan wordt alleen de kop bijgewerkt, want herbouwen tijdens het
- * typen haalt de cursor uit het veld. En de config die na ons eigen bericht
- * terugkomt van Home Assistant wordt herkend en genegeerd, anders herbouwt de
- * editor zichzelf bij elke aanslag alsnog.
+ * `ha-form` houdt zijn eigen waarde niet bij. Het tekent wat er in `data` staat
+ * en meldt terug wat je wijzigde; schrijft de editor die wijziging niet terug,
+ * dan tekent het veld bij de eerstvolgende ronde weer de oude waarde. Naam,
+ * status en de acties leken daardoor domweg niet te werken -- je typte, het veld
+ * sprong terug, en de helft van wat je instelde bereikte de kaart nooit. De
+ * andere editors in deze familie doen dat terugschrijven wel (`DacEditor.sync_`);
+ * deze deed het niet. Daarom staat er nu per blok een `vernieuw()` die alle
+ * velden opnieuw uit het item vult, en draait `emit_()` ze allemaal.
  */
 
 import "./icon-picker.js";
@@ -44,27 +45,49 @@ import "./tone-picker.js";
 const clampCols = (n) => Math.min(Math.max(1, Number(n) || 2), 3);
 const asItem = (i) => (typeof i === "string" ? { entity: i } : { ...i });
 
-/** Dezelfde normalisatie als de kaart, zodat oude configs hier ook openen. */
-function toRows(config) {
-  if (Array.isArray(config.rows) && config.rows.length) {
-    return config.rows.map((r) => ({
-      columns: clampCols(r.columns),
-      items: (r.items ?? r.entities ?? []).map(asItem),
-    }));
+/** Een rij heeft precies zoveel plekken als kolommen: niet meer, niet minder. */
+function vul(row) {
+  row.bewaard ??= [];
+  while (row.items.length < row.columns) row.items.push(row.bewaard.pop() ?? { entity: "" });
+  while (row.items.length > row.columns) {
+    const eruit = row.items.pop();
+    // Alleen ingevulde plekken zijn het bewaren waard, en alleen zolang deze
+    // editor openstaat. Eén klik op "2" mag geen werk weggooien.
+    if (eruit.entity) row.bewaard.push(eruit);
   }
-  const flat = (config.items ?? config.entities ?? []).map(asItem);
-  return flat.length ? [{ columns: clampCols(config.columns), items: flat }] : [];
+  return row;
 }
 
 /**
- * Een rij heeft minstens zoveel plekken als kolommen.
+ * Breng elke configvorm terug tot rijen met vaste plekken.
  *
- * De lege plekken zijn echte items in de lijst, zodat de kiezer erin een vaste
- * plek heeft om naartoe te schrijven. Bij het wegschrijven vallen ze weg.
+ * Staan er meer entiteiten in een rij dan er kolommen zijn -- een oude config,
+ * of met de hand geschreven YAML -- dan wordt die rij opgeknipt in meerdere
+ * rijen van hetzelfde kolomaantal. Dat is precies wat de kaart al tekende, want
+ * die laat een te volle rij doorlopen naar de volgende regel. Afkappen zou hier
+ * betekenen dat het openen van de editor stilletjes entiteiten wist.
  */
-function vulAan(row) {
-  while (row.items.length < row.columns) row.items.push({ entity: "" });
-  return row;
+function toRows(config) {
+  const ruw = Array.isArray(config.rows) && config.rows.length
+    ? config.rows.map((r) => ({
+        columns: clampCols(r.columns),
+        items: (r.items ?? r.entities ?? []).map(asItem),
+      }))
+    : (() => {
+        const flat = (config.items ?? config.entities ?? []).map(asItem);
+        return flat.length ? [{ columns: clampCols(config.columns), items: flat }] : [];
+      })();
+
+  const uit = [];
+  for (const row of ruw) {
+    const groepen = [];
+    for (let i = 0; i < row.items.length; i += row.columns) {
+      groepen.push(row.items.slice(i, i + row.columns));
+    }
+    if (!groepen.length) groepen.push([]);
+    for (const items of groepen) uit.push(vul({ columns: row.columns, items }));
+  }
+  return uit;
 }
 
 /** Wat er werkelijk naar de dashboardconfig gaat: geen lege plekken, geen lege rijen. */
@@ -126,6 +149,7 @@ const CSS = `
     color: var(--secondary-text-color); font-size: 16px; line-height: 1;
   }
   .dac-ed .weg:hover { background: rgba(127,127,127,.16); color: var(--error-color, #d03b3b); }
+  .dac-ed .weg[hidden] { display: none; }
 
   .dac-ed .rijbody { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 
@@ -155,13 +179,12 @@ const CSS = `
   .dac-ed .itembody { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
 
   /* ------------------------------------------------------------- knoppen */
-  .dac-ed .toevoegen {
-    padding: 9px 12px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500;
-    border: 1px dashed var(--divider-color); border-radius: 10px;
-    background: transparent; color: var(--primary-color); text-align: left;
+  .dac-ed .rijtoevoegen {
+    padding: 13px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 500;
+    border: 1px dashed var(--divider-color); border-radius: 12px;
+    background: transparent; color: var(--primary-color); text-align: center;
   }
-  .dac-ed .toevoegen:hover { background: rgba(127,127,127,.08); }
-  .dac-ed .rijtoevoegen { padding: 13px; font-size: 14px; border-radius: 12px; text-align: center; }
+  .dac-ed .rijtoevoegen:hover { background: rgba(127,127,127,.08); }
 
   .dac-ed .uitleg {
     margin: 0; font-size: 12px; line-height: 1.45; color: var(--secondary-text-color);
@@ -176,6 +199,8 @@ class EntitiesEditor extends HTMLElement {
     // Welke blokken openstaan, op sleutel `r2` en `r2i0`. Een herbouw mag niet
     // dichtslaan wat je net had opengeklapt.
     this.open_ = new Set();
+    // Per blok een functie die zijn velden opnieuw uit het item vult. Zie de kop.
+    this.syncs_ = [];
   }
 
   setConfig(config) {
@@ -193,7 +218,7 @@ class EntitiesEditor extends HTMLElement {
     // want die staat niet in de weggeschreven config.
     if (this.gebouwd_ && JSON.stringify(uitgekleed(binnen)) === this.uit_) return;
 
-    this.rows_ = binnen.map(vulAan);
+    this.rows_ = binnen;
     if (!this.eersteKeer_) {
       this.eersteKeer_ = true;
       // Eén rij staat open, want dan is er niets te overzien. Bij meer rijen
@@ -250,7 +275,7 @@ class EntitiesEditor extends HTMLElement {
     this.open_ = nieuw;
   }
 
-  /** Hetzelfde, voor een plek die uit een rij gehaald wordt. */
+  /** Hetzelfde, voor een plek die leeggemaakt wordt en waar de rest opschuift. */
   itemWeg_(r, i) {
     const nieuw = new Set();
     for (const k of this.open_) {
@@ -280,6 +305,7 @@ class EntitiesEditor extends HTMLElement {
     await customElements.whenDefined("ha-form");
     this.gebouwd_ = true;
     this.replaceChildren();
+    this.syncs_ = [];
 
     const style = document.createElement("style");
     style.textContent = CSS;
@@ -298,26 +324,20 @@ class EntitiesEditor extends HTMLElement {
       wrap.appendChild(uitleg);
     }
 
-    wrap.appendChild(
-      this.knop_("＋  Rij toevoegen", "toevoegen rijtoevoegen", () => {
-        const row = vulAan({ columns: 2, items: [] });
-        this.rows_.push(row);
-        const r = this.rows_.length - 1;
-        this.open_.add(`r${r}`);
-        this.legePlekkenOpen_(row, r);
-        this.emit_();
-        this.build_();
-      })
-    );
-  }
-
-  knop_(tekst, klasse, onClick) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = klasse;
-    b.textContent = tekst;
-    b.addEventListener("click", onClick);
-    return b;
+    const knop = document.createElement("button");
+    knop.type = "button";
+    knop.className = "rijtoevoegen";
+    knop.textContent = "＋  Rij toevoegen";
+    knop.addEventListener("click", () => {
+      const row = vul({ columns: 2, items: [] });
+      this.rows_.push(row);
+      const r = this.rows_.length - 1;
+      this.open_.add(`r${r}`);
+      this.legePlekkenOpen_(row, r);
+      this.emit_();
+      this.build_();
+    });
+    wrap.appendChild(knop);
   }
 
   /**
@@ -356,37 +376,40 @@ class EntitiesEditor extends HTMLElement {
     const sub = document.createElement("small");
     titel.append(naam, sub);
 
-    // De samenvatting is wat een dichtgeklapte rij nog bruikbaar maakt: je moet
-    // hem kunnen herkennen zonder hem open te doen.
-    const vernieuwSub = () => {
-      const gevuld = row.items.filter((i) => i.entity);
-      const kolommen = `${row.columns} kolom${row.columns > 1 ? "men" : ""}`;
-      sub.textContent = gevuld.length
-        ? `${kolommen} · ${gevuld.map((i) => this.itemNaam_(i)).join(", ")}`
-        : `${kolommen} · nog leeg`;
-    };
-    vernieuwSub();
-
     const kol = document.createElement("span");
     kol.className = "kolommen";
-    for (const n of [1, 2, 3]) {
+    const kolKnoppen = [1, 2, 3].map((n) => {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = String(n);
-      b.title = `${n} naast elkaar`;
-      b.setAttribute("aria-pressed", String(row.columns === n));
+      b.title = `${n} entiteit${n > 1 ? "en" : ""} in deze rij`;
       kol.appendChild(
         this.binnenKop_(b, () => {
           if (row.columns === n) return;
           row.columns = n;
-          vulAan(row);
+          vul(row);
           this.open_.add(`r${r}`);
           this.legePlekkenOpen_(row, r);
           this.emit_();
           this.build_();
         })
       );
-    }
+      return b;
+    });
+
+    // De samenvatting is wat een dichtgeklapte rij nog bruikbaar maakt: je moet
+    // hem kunnen herkennen zonder hem open te doen.
+    const vernieuwKop = () => {
+      const gevuld = row.items.filter((i) => i.entity);
+      const kolommen = `${row.columns} kolom${row.columns > 1 ? "men" : ""}`;
+      sub.textContent = gevuld.length
+        ? `${kolommen} · ${gevuld.map((i) => this.itemNaam_(i)).join(", ")}`
+        : `${kolommen} · nog leeg`;
+      kolKnoppen.forEach((b) =>
+        b.setAttribute("aria-pressed", String(row.columns === Number(b.textContent)))
+      );
+    };
+    this.syncs_.push(vernieuwKop);
 
     const weg = document.createElement("button");
     weg.type = "button";
@@ -405,20 +428,10 @@ class EntitiesEditor extends HTMLElement {
     // ---- body: de plekken in deze rij ----
     const body = document.createElement("div");
     body.className = "rijbody";
-    row.items.forEach((item, i) =>
-      body.appendChild(this.itemBlok_(row, item, r, i, vernieuwSub))
-    );
-
-    body.appendChild(
-      this.knop_("＋  Entiteit toevoegen", "toevoegen", () => {
-        row.items.push({ entity: "" });
-        this.open_.add(`r${r}i${row.items.length - 1}`);
-        this.emit_();
-        this.build_();
-      })
-    );
+    row.items.forEach((item, i) => body.appendChild(this.itemBlok_(row, item, r, i)));
 
     det.append(sum, body);
+    vernieuwKop();
     return det;
   }
 
@@ -432,7 +445,7 @@ class EntitiesEditor extends HTMLElement {
     );
   }
 
-  itemBlok_(row, item, r, i, vernieuwSub) {
+  itemBlok_(row, item, r, i) {
     const det = document.createElement("details");
     det.className = "item";
     this.onthoud_(det, `r${r}i${i}`);
@@ -454,23 +467,17 @@ class EntitiesEditor extends HTMLElement {
     const sub = document.createElement("small");
     titel.append(naam, sub);
 
-    const vernieuwKop = () => {
-      naam.textContent = item.entity ? this.itemNaam_(item) : "Kies een entiteit";
-      sub.textContent = item.entity || "";
-      det.dataset.leeg = String(!item.entity);
-      vernieuwSub();
-    };
-    vernieuwKop();
-
     const weg = document.createElement("button");
     weg.type = "button";
     weg.className = "weg";
-    weg.title = "Uit de rij halen";
+    weg.title = "Deze plek leegmaken";
     weg.textContent = "✕";
     this.binnenKop_(weg, () => {
+      // Leeghalen laat de rest opschuiven, want zo tekent de kaart het ook:
+      // een gat in kolom 1 bestaat daar niet.
       row.items.splice(i, 1);
       this.itemWeg_(r, i);
-      vulAan(row);
+      vul(row);
       this.emit_();
       this.build_();
     });
@@ -483,21 +490,18 @@ class EntitiesEditor extends HTMLElement {
 
     const kiezer = document.createElement("ha-form");
     kiezer.hass = this.hass_;
-    kiezer.data = { entity: item.entity || undefined };
     kiezer.schema = [{ name: "entity", selector: { entity: {} } }];
     kiezer.computeLabel = () => "Entiteit";
     kiezer.addEventListener("value-changed", (e) => {
       e.stopPropagation();
       item.entity = e.detail.value.entity ?? "";
       // Geen herbouw: de kiezer die dit afvuurt zou onder je handen verdwijnen.
-      vernieuwKop();
       this.emit_();
     });
 
     const icoon = document.createElement("dac-icon-picker");
     icoon.label = "Icoon";
     icoon.hass = this.hass_;
-    icoon.value = item.icon ?? "";
     icoon.addEventListener("value-changed", (e) => {
       e.stopPropagation();
       if (e.detail.value) item.icon = e.detail.value;
@@ -508,7 +512,6 @@ class EntitiesEditor extends HTMLElement {
     const kleur = document.createElement("dac-tone-picker");
     kleur.label = "Kleur";
     kleur.hass = this.hass_;
-    kleur.value = item.tone ?? "";
     kleur.addEventListener("value-changed", (e) => {
       e.stopPropagation();
       if (e.detail.value) item.tone = e.detail.value;
@@ -518,25 +521,27 @@ class EntitiesEditor extends HTMLElement {
 
     const rest = document.createElement("ha-form");
     rest.hass = this.hass_;
-    rest.data = {
-      name: item.name ?? "",
-      show_state: item.show_state ?? true,
-      tap_action: item.tap_action,
-      hold_action: item.hold_action,
-    };
     rest.schema = [
       { name: "name", selector: { text: {} } },
       { name: "show_state", selector: { boolean: {} } },
-      { name: "tap_action", selector: { ui_action: { default_action: "toggle" } } },
+      { name: "icon_tap_action", selector: { ui_action: { default_action: "toggle" } } },
+      { name: "icon_hold_action", selector: { ui_action: { default_action: "more-info" } } },
+      { name: "tap_action", selector: { ui_action: { default_action: "more-info" } } },
       { name: "hold_action", selector: { ui_action: { default_action: "more-info" } } },
     ];
     rest.computeLabel = (s) =>
       ({
         name: "Naam (overschrijft die van de entiteit)",
-        show_state: "Toestand tonen",
-        tap_action: "Tikken",
-        hold_action: "Vasthouden",
+        show_state: "Status tonen",
+        icon_tap_action: "Tikken op het icoon",
+        icon_hold_action: "Vasthouden op het icoon",
+        tap_action: "Tikken op de regel",
+        hold_action: "Vasthouden op de regel",
       })[s.name] ?? s.name;
+    rest.computeHelper = (s) =>
+      s.name === "icon_tap_action"
+        ? "Het icoon en de regel zijn twee knoppen: het icoon schakelt, de regel opent of navigeert."
+        : undefined;
     rest.addEventListener("value-changed", (e) => {
       e.stopPropagation();
       const v = e.detail.value;
@@ -545,16 +550,42 @@ class EntitiesEditor extends HTMLElement {
       // `false` moet blijven staan, alleen de standaard mag weg.
       if (v.show_state === false) item.show_state = false;
       else delete item.show_state;
-      if (v.tap_action) item.tap_action = v.tap_action;
-      else delete item.tap_action;
-      if (v.hold_action) item.hold_action = v.hold_action;
-      else delete item.hold_action;
-      vernieuwKop();
+      for (const k of ["icon_tap_action", "icon_hold_action", "tap_action", "hold_action"]) {
+        if (v[k]) item[k] = v[k];
+        else delete item[k];
+      }
       this.emit_();
     });
 
+    /**
+     * Alle velden opnieuw uit het item vullen.
+     *
+     * Dit is het terugschrijven waar de kop over gaat. Zonder deze regel tekent
+     * `ha-form` bij de volgende ronde weer de waarde van vóór jouw wijziging.
+     */
+    const vernieuw = () => {
+      naam.textContent = item.entity ? this.itemNaam_(item) : "Kies een entiteit";
+      sub.textContent = item.entity || "";
+      det.dataset.leeg = String(!item.entity);
+      weg.hidden = !item.entity;
+
+      kiezer.data = { entity: item.entity || undefined };
+      icoon.value = item.icon ?? "";
+      kleur.value = item.tone ?? "";
+      rest.data = {
+        name: item.name ?? "",
+        show_state: item.show_state ?? true,
+        icon_tap_action: item.icon_tap_action,
+        icon_hold_action: item.icon_hold_action,
+        tap_action: item.tap_action,
+        hold_action: item.hold_action,
+      };
+    };
+    this.syncs_.push(vernieuw);
+
     body.append(kiezer, icoon, kleur, rest);
     det.append(sum, body);
+    vernieuw();
     return det;
   }
 
@@ -564,6 +595,8 @@ class EntitiesEditor extends HTMLElement {
     const rows = uitgekleed(this.rows_);
     // Onthouden wat we wegschreven, zodat we onze eigen echo herkennen.
     this.uit_ = JSON.stringify(rows);
+
+    for (const sync of this.syncs_) sync();
 
     this.dispatchEvent(
       new CustomEvent("config-changed", {

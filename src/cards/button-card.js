@@ -351,7 +351,7 @@ class ButtonEditor extends DacEditor {
         layout: "Vorm",
         show_icon: "Icoon tonen",
         show_name: "Naam tonen",
-        show_state: "Toestand tonen",
+        show_state: "Status tonen",
         icon_tap_action: "Tikken op het icoon",
         icon_hold_action: "Vasthouden op het icoon",
         tap_action: "Tikken op de kaart",

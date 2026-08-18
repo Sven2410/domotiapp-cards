@@ -11,6 +11,14 @@
  * het vuurt `value-changed` met de hele data, want dat is het contract waar de
  * editors op leunen. Wat het niet nadoet -- de zoekfunctie van de
  * entiteitkiezer, de vertalingen, de opmaak -- doet er voor die test niet toe.
+ *
+ * Eén ding doet het wel na, en dat is het belangrijkste: `ha-form` houdt zijn
+ * eigen waarde NIET bij. Het tekent wat er in `data` staat en meldt terug wat je
+ * wijzigde; schrijft de editor die wijziging niet terug in `data`, dan springt
+ * het veld terug naar de oude waarde en lijkt de instelling niet te werken.
+ * Deze dubbel hield eerst wél zelf bij wat je typte, en verzweeg daarmee precies
+ * die fout -- de editor van de entiteitenkaart werkte op de werkbank en in Home
+ * Assistant niet.
  */
 
 class HaFormStub extends HTMLElement {
@@ -129,10 +137,14 @@ class HaFormStub extends HTMLElement {
   }
 
   emit_(naam, waarde) {
-    this.data_ = { ...this.data_, [naam]: waarde };
+    // Bewust niet in `data_` schrijven: het echte ding doet dat ook niet. De
+    // editor hoort het terug te zetten, en tot die tijd tekent het veld de oude
+    // waarde -- precies wat je in Home Assistant zou zien.
+    const volgende = { ...this.data_, [naam]: waarde };
+    this.render_();
     this.dispatchEvent(
       new CustomEvent("value-changed", {
-        detail: { value: this.data_ },
+        detail: { value: volgende },
         bubbles: true,
         composed: true,
       })

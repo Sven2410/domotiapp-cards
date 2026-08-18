@@ -161,7 +161,7 @@ class SeparatorEditor extends DacEditor {
 
   helper(s) {
     if (s.name === "secondary_entity")
-      return "Toont de toestand van deze entiteit rechts van de lijn, bijvoorbeeld een temperatuur of een aantal.";
+      return "Toont de status van deze entiteit rechts van de lijn, bijvoorbeeld een temperatuur of een aantal.";
     return undefined;
   }
 }

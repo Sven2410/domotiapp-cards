@@ -247,6 +247,14 @@ const COLUMNS = [
         { entity: "scene.radio", name: "Radio", icon: "radio", tone: "pink" },
         { entity: "sensor.vocht_slaapkamer", name: "Vocht", icon: "drop", tone: "water" } ] },
     ] },
+    // Regressie: een zelfgekozen icoon hoort de eigen afbeelding te verslaan, een
+    // eigen naam die van de entiteit, en status verbergen hoort te verbergen.
+    { type: "custom:domotiapp-entities-card", rows: [
+      { columns: 2, items: [
+        { entity: "sensor.eredivisie", name: "Voetbal", icon: "star", show_state: false },
+        { entity: "sensor.eredivisie",
+          tap_action: { action: "navigate", navigation_path: "#voetbal" } } ] },
+    ] },
     { type: "custom:domotiapp-entities-card", columns: 2, items: [
       { entity: "cover.garagedeur", name: "Oude vorm" },
       { entity: "alarm_control_panel.alarm", name: "blijft werken" } ] },
@@ -343,6 +351,9 @@ function editor(titel, tag, config) {
 }
 
 cols.append(
+  editor("Editor — knopkaart", "domotiapp-button-card-editor", {
+    type: "custom:domotiapp-button-card", entity: "light.spots_sven",
+  }),
   editor("Editor — nieuwe kaart", "domotiapp-entities-card-editor", { rows: [] }),
   editor("Editor — bestaande kaart", "domotiapp-entities-card-editor", {
     rows: [

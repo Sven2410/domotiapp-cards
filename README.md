@@ -147,9 +147,14 @@ staat.
   dat gaat voor wat het domein oplevert. Dat geldt op de entiteiten- én de
   knopkaart.
 - **De editor van de entiteitenkaart** werkt per rij, en elke rij klapt dicht. Wat
-  je van een entiteit instelt — naam, icoon, kleur, toestand tonen, tikgedrag —
+  je van een entiteit instelt — naam, icoon, kleur, status tonen, tikgedrag —
   staat onder die entiteit, niet in een tweede lijst eronder. Een verse kaart
-  opent met één knop: rij toevoegen.
+  opent met één knop: rij toevoegen. Het kolomaantal ís het aantal plekken: twee
+  kolommen is twee entiteiten, en een derde hoort in een tweede rij.
+- **Het icoon en de regel zijn twee knoppen**, op de knopkaart én op de
+  entiteitenkaart. Het icoon schakelt, de regel opent of navigeert, en je stelt
+  ze los van elkaar in (`icon_tap_action` naast `tap_action`). Zo doe je het
+  lampje aan zonder de pop-up te openen, en andersom.
 
 ---
 
@@ -208,7 +213,9 @@ sections:
                 icon: bulb
               - entity: switch.tuin
                 show_state: false
-                tap_action:
+                icon_tap_action:                # het icoon schakelt
+                  action: toggle
+                tap_action:                     # de regel opent de pop-up
                   action: navigate
                   navigation_path: "#tuin"
 

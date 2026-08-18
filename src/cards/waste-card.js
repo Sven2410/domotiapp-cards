@@ -105,7 +105,7 @@ class WasteCard extends DacCard {
   validate(config) {
     const list = config.sensors ?? config.entities ?? (config.entity ? [config.entity] : []);
     if (!list.length) {
-      return { ...config, [INCOMPLETE]: "Kies minstens één afvalsensor waarvan de toestand een datum is." };
+      return { ...config, [INCOMPLETE]: "Kies minstens één afvalsensor waarvan de status een datum is." };
     }
     return {
       show_hero: true,
@@ -328,7 +328,7 @@ class WasteEditor extends DacEditor {
 
   helper(s) {
     if (s.name === "sensors")
-      return "Sensoren waarvan de toestand een datum is, bijvoorbeeld 18-08-2026. De kaart sorteert zelf; laat een kleur leeg om de bakkleur op de naam te laten kiezen.";
+      return "Sensoren waarvan de status een datum is, bijvoorbeeld 18-08-2026. De kaart sorteert zelf; laat een kleur leeg om de bakkleur op de naam te laten kiezen.";
     return undefined;
   }
 }

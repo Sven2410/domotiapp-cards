@@ -273,7 +273,7 @@ export const LABELS = {
   tap_action: "Tikken",
   hold_action: "Vasthouden",
   double_tap_action: "Dubbeltikken",
-  show_state: "Toestand tonen",
+  show_state: "Status tonen",
   show_name: "Naam tonen",
   show_icon: "Icoon tonen",
   fill: "Vullen",
