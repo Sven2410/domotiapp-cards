@@ -50,14 +50,15 @@ class ButtonCard extends DacCard {
   static css = /* css */ `
     :host { display: block; height: 100%; }
 
+    /* Achtergrond, rand, ronding en schaduw komen van .surface in theme.js,
+       niet uit dit bestand. Ze stonden hier wel, met --dac-radius-sm in plaats
+       van --dac-radius, en dat is precies hoe je het ziet op een dashboard:
+       een rolluikkaart met ronde hoeken en een knop eronder met scherpere. Eén
+       kaart die zijn eigen vorm nabouwt, loopt vroeg of laat uit de pas. */
     .btn {
       position: relative; overflow: hidden;
       width: 100%; height: 100%; padding: 0; margin: 0;
       font: inherit; color: inherit; text-align: left; cursor: pointer;
-      background: var(--dac-surface);
-      border: 1px solid var(--dac-border);
-      border-radius: var(--dac-radius-sm);
-      box-shadow: var(--dac-shadow);
       display: flex; align-items: center; gap: 12px;
       transition: border-color 220ms ease, background 220ms ease, transform 220ms ease;
       touch-action: manipulation;
@@ -162,7 +163,7 @@ class ButtonCard extends DacCard {
     this.setAttribute("layout", ["row", "tile", "compact"].includes(c.layout) ? c.layout : "row");
 
     return `
-      <div class="btn" role="button" tabindex="0" style="--tone:${this.tone_()}">
+      <div class="btn surface" role="button" tabindex="0" style="--tone:${this.tone_()}">
         <span class="wash"></span>
         ${c.show_icon === false ? "" : `<span class="chip" role="button" tabindex="0"></span>`}
         <span class="txt">

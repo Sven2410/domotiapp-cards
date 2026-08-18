@@ -54,7 +54,11 @@
 
 <script type="module">
 import "./ha-form-stub.js";   // testdubbel: zonder dit bouwt geen enkele editor
-import "../dist/domotiapp-cards.js";
+
+// Altijd de verse bundel. Zonder die tijdstempel houdt de browser de vorige in
+// het geheugen vast, ook na een herlaad -- en zit je naar code te kijken die je
+// net vervangen hebt, met een conclusie die nergens op slaat.
+await import(`../dist/domotiapp-cards.js?t=${Date.now()}`);
 
 /* ---------------------------------------------------------------- mock hass */
 
@@ -408,16 +412,31 @@ window.addEventListener("error", (e) => log(`FOUT: ${e.message}`, "err"));
 window.addEventListener("unhandledrejection", (e) => log(`FOUT: ${e.reason}`, "err"));
 log("werkbank geladen");
 
-// Meet elke kaart: hoort een heel aantal Mushroom-rijen te zijn (56, 120, 184, 248...).
+// Meet elke kaart: hoort een heel aantal Mushroom-rijen te zijn (56, 120, 184, 248...),
+// en hoort dezelfde ronding te dragen als de rest van de familie.
+//
+// Die tweede kwam er later bij, en niet voor niets: de knopkaart bouwde zijn
+// oppervlak zelf na met `--dac-radius-sm` in plaats van `--dac-radius`, en dan
+// staat er op een dashboard een rolluikkaart met ronde hoeken en een knop
+// eronder met scherpere. Dat is precies het soort verschil dat je pas ziet als
+// ze naast elkaar staan -- dus meet het, in plaats van erop te vertrouwen.
 requestAnimationFrame(() => {
   for (const c of cards) {
     const h = Math.round(c.getBoundingClientRect().height);
     const rows = c.getGridOptions?.().rows;
     const ideal = typeof rows === "number" ? rows * 56 + (rows - 1) * 8 : null;
+
+    const doos = c.shadowRoot?.querySelector(".card, .btn");
+    const r = doos ? getComputedStyle(doos).borderTopLeftRadius : null;
+    // 999px is de compacte pil, die mag afwijken; de rest hoort 20px te zijn.
+    const radiusOk = !r || r === "20px" || parseFloat(r) > 100;
+
     const tag = document.createElement("div");
     tag.className = "h";
     tag.textContent = `${c.tagName.toLowerCase().replace("domotiapp-","").replace("-card","")}: ${h}px` +
-      (ideal !== null ? `  |  ${rows} rij(en) = ${ideal}px  ${h === ideal ? "OK" : "AFWIJKING " + (h - ideal)}` : "  |  geen rows");
+      (ideal !== null ? `  |  ${rows} rij(en) = ${ideal}px  ${h === ideal ? "OK" : "AFWIJKING " + (h - ideal)}` : "  |  geen rows") +
+      (r ? `  |  hoek ${r} ${radiusOk ? "" : "— WIJKT AF VAN DE FAMILIE"}` : "");
+    if (!radiusOk) tag.style.color = "#d03b3b";
     c.parentElement?.insertBefore(tag, c.nextSibling);
   }
 });
