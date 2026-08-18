@@ -116,8 +116,14 @@ export class DacEditor extends HTMLElement {
   }
 
   /**
-   * Fields this card wants drawn with our own pickers, in order, above the
-   * form. Each is `{ key, kind: "icon" | "tone", label, fallback }`.
+   * Fields this card wants drawn with our own pickers, in order.
+   *
+   * Each is `{ key, kind: "icon" | "tone", label, fallback }`. They land above
+   * the form, which is right for the icon and colour of the card itself -- those
+   * are the first thing you set. A picker that only makes sense *after* a choice
+   * in the form -- a colour per chosen sensor, say -- sets `after: true` and
+   * lands below it, in the order you would fill the editor in. `compact: true`
+   * drops the frame, for a list of them.
    */
   pickers() {
     return [];
@@ -152,29 +158,35 @@ export class DacEditor extends HTMLElement {
 
     const pickerDefs = this.pickers();
     this.pickerSig_ = pickerDefs.map((d) => d.key).join("|");
-    if (pickerDefs.length) {
+
+    const bak = (marge) => {
       const wrap = document.createElement("div");
-      wrap.style.cssText = "display:flex;flex-direction:column;gap:12px;margin-bottom:16px";
-      for (const def of pickerDefs) {
-        const el = document.createElement(
-          def.kind === "tone" ? "dac-tone-picker" : "dac-icon-picker"
-        );
-        el.label = def.label;
-        el.fallback = def.fallback;
-        if (def.auto === false) el.auto = false;
-        if (def.statuses === false) el.statuses = false;
-        el.hass = this.hass_;
-        el.value = this.config_[def.key];
-        el.addEventListener("value-changed", (e) => {
-          e.stopPropagation();
-          this.patch_({ [def.key]: e.detail.value });
-        });
-        this.pickers_.push(el);
-        el.dataset.key = def.key;
-        wrap.appendChild(el);
-      }
-      this.appendChild(wrap);
+      wrap.style.cssText = `display:flex;flex-direction:column;gap:12px;${marge}`;
+      return wrap;
+    };
+    const voor = bak("margin-bottom:16px");
+    const na = bak("margin-top:16px");
+
+    for (const def of pickerDefs) {
+      const el = document.createElement(
+        def.kind === "tone" ? "dac-tone-picker" : "dac-icon-picker"
+      );
+      el.label = def.label;
+      el.fallback = def.fallback;
+      if (def.auto === false) el.auto = false;
+      if (def.statuses === false) el.statuses = false;
+      if (def.compact) el.compact = true;
+      el.hass = this.hass_;
+      el.value = this.config_[def.key];
+      el.addEventListener("value-changed", (e) => {
+        e.stopPropagation();
+        this.patch_({ [def.key]: e.detail.value });
+      });
+      this.pickers_.push(el);
+      el.dataset.key = def.key;
+      (def.after ? na : voor).appendChild(el);
     }
+    if (voor.children.length) this.appendChild(voor);
 
     const form = document.createElement("ha-form");
     form.hass = this.hass_;
@@ -188,6 +200,7 @@ export class DacEditor extends HTMLElement {
     });
     this.form_ = form;
     this.appendChild(form);
+    if (na.children.length) this.appendChild(na);
   }
 
   sync_() {

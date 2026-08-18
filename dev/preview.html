@@ -101,6 +101,16 @@ const states = Object.fromEntries([
   S("light.groep_buiten", "on", {
     friendly_name: "Groep buiten", supported_color_modes: ["onoff"],
   }),
+  // Een lichtgroep met een gekleurde ledstrip erin. Home Assistant leent de
+  // kleur van het lid dat aan staat, dus meldt deze groep paars terwijl er twee
+  // witte spots in hangen. `entity_id` is wat hem als groep verraadt -- en één
+  // lid is even hard een groep als drie, zoals in Svens huis (groep_buiten).
+  S("light.groep_slaapkamer", "on", {
+    friendly_name: "Groep slaapkamer", brightness: 200,
+    entity_id: ["light.ledstrip_sven", "light.spots_sven"],
+    supported_color_modes: ["color_temp", "xy"], color_mode: "xy",
+    rgb_color: [188, 16, 200],
+  }),
   S("light.kapot", "unavailable", { friendly_name: "Bureaulamp" }),
 
   // Zoals Svens rolluiken: open/stop/dicht, geen terugkoppeling.
@@ -263,6 +273,10 @@ const COLUMNS = [
     // Zonder icoon in de config, zodat de eigen afbeelding van de entiteit aan
     // bod komt -- precies wat er in Home Assistant ontbrak.
     { type: "custom:domotiapp-button-card", entity: "sensor.eredivisie" },
+    // Regressie op de lampkleur: één ledstrip mag zijn eigen kleur dragen, de
+    // groep eromheen niet -- die hoort lampgeel te zijn, niet paars.
+    { type: "custom:domotiapp-button-card", entity: "light.ledstrip_sven" },
+    { type: "custom:domotiapp-button-card", entity: "light.groep_slaapkamer" },
     { type: "custom:domotiapp-button-card", entity: "input_boolean.slapen", icon: "moon", tone: "house" },
     { type: "custom:domotiapp-button-card", entity: "scene.radio", icon: "radio", tone: "pink" },
     { type: "custom:domotiapp-waste-card",
@@ -371,6 +385,11 @@ function editor(titel, tag, config) {
 }
 
 cols.append(
+  editor("Editor — afvalkaart", "domotiapp-waste-card-editor", {
+    type: "custom:domotiapp-waste-card",
+    sensors: ["sensor.mijnafvalwijzer_pmd", "sensor.mijnafvalwijzer_gft"],
+    tones: { "sensor.mijnafvalwijzer_gft": "teal" },
+  }),
   editor("Editor — knopkaart", "domotiapp-button-card-editor", {
     type: "custom:domotiapp-button-card", entity: "light.spots_sven",
   }),

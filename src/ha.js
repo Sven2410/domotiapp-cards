@@ -29,6 +29,28 @@ export const attrsOf = (hass, entityId) => stateOf(hass, entityId)?.attributes ?
 export const pictureOf = (hass, entityId, chosenIcon) =>
   chosenIcon ? null : attrsOf(hass, entityId).entity_picture || null;
 
+/**
+ * De kleur die een brandende lamp zelf draagt, of null.
+ *
+ * Een groep krijgt hier bewust niets. Home Assistant leidt de kleur van een
+ * lichtgroep af uit het lid dat toevallig aan staat: zet één ledstrip op paars
+ * en de hele groep meldt paars, ook al hangen er drie witte spots in. En een
+ * lamp op 2700 K meldt een oranjebruine rgb-waarde, wat op een icoon leest als
+ * een storing in plaats van als warm wit. Dat is geen kleur van die groep, dus
+ * die geven we niet terug -- daar hoort de vaste lichtkleur.
+ *
+ * De test is `attributes.entity_id`: alleen groepen dragen de lijst met leden.
+ * Nagekeken op een echte installatie, en dus niet op ledental: er staat daar een
+ * groep met één lid, en die is even hard een groep als een groep met drie.
+ */
+export function lightTone(st) {
+  if (!st || st.state !== "on") return null;
+  const a = st.attributes ?? {};
+  if (Array.isArray(a.entity_id)) return null;
+  const rgb = a.rgb_color;
+  return Array.isArray(rgb) && rgb.length >= 3 ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : null;
+}
+
 /** The name to show: what the config said, else the entity's own. */
 export function nameOf(hass, entityId, configured) {
   if (configured) return configured;

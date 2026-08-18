@@ -175,6 +175,11 @@ class LightCard extends DacCard {
 
     // Een lamp die kleur maakt, toont die kleur. Dat is meer waard dan welk
     // label ook: je ziet wat je krijgt voordat je de kamer in loopt.
+    //
+    // Hier staat bewust geen groepstest, anders dan op de knop- en
+    // entiteitenkaart (zie `lightTone` in ha.js). Dit is de kaart met de
+    // kleurstrip: hier maak je de kleur, en dan hoort het icoon te laten zien
+    // wat je aan het maken bent -- ook als het een groep is die je verzet.
     const rgb = on ? st?.attributes?.rgb_color : null;
     lampEl.style.setProperty("--tone", rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : "var(--dac-lit)");
 

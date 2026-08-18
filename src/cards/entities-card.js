@@ -33,6 +33,7 @@ import {
   isDead,
   isOn,
   isStateless,
+  lightTone,
   localizeState,
   nameOf,
   pictureOf,
@@ -137,13 +138,12 @@ class EntitiesCard extends DacCard {
     return this.config.rows[+r]?.items[+i];
   }
 
+  /** Eén lamp draagt zijn eigen kleur, een groep niet. Zie `lightTone` in ha.js. */
   tone_(item) {
     if (item.tone) return toneValue(item.tone);
     if (this.config.tone) return toneValue(this.config.tone);
     if (domainOf(item.entity) !== "light") return TONES.accent;
-    const st = stateOf(this.hass, item.entity);
-    const rgb = st?.state === "on" ? st.attributes?.rgb_color : null;
-    return rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : TONES.lit;
+    return lightTone(stateOf(this.hass, item.entity)) ?? TONES.lit;
   }
 
   template() {

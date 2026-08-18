@@ -128,14 +128,23 @@ instellingen én het scheelt dashboards waar bij één apparaat het verkeerde vi
 staat.
 
 - **Verlichting** leest `supported_color_modes`. Precies `["onoff"]` krijgt een
-  tuimelaar, al het andere een helderheidsschuif. Een RGB-lamp kleurt zijn eigen
-  vulling, zodat je ziet wat je krijgt voordat je de kamer in loopt.
+  tuimelaar, al het andere een helderheidsschuif. Eén RGB-lamp kleurt zijn eigen
+  vulling, zodat je ziet wat je krijgt voordat je de kamer in loopt — maar een
+  lichtgroep niet. Home Assistant leent de kleur van een groep uit het lid dat
+  toevallig aan staat, dus wordt een kamer met vier witte spots paars zodra er één
+  ledstrip in hangt. Groepen krijgen daarom de vaste lichtkleur; op de lichtkaart,
+  waar je de kleur juist zit te maken, blijft de echte kleur staan.
 - **Rolluiken** lezen `supported_features`. De positieschuif verschijnt alleen bij
   motoren die hun stand terugmelden (`SET_POSITION`). Doen ze dat niet — de meeste
   Nederlandse rolluikmotoren — dan zijn het open, stop en dicht, zonder statusregel:
   een zin die zegt dat er niets bekend is, voegt niets toe. Het icoon volgt dan de
   knop die je indrukte, als aanname, zonder die knop te markeren alsof er iets
   gemeten is.
+- **Kleur** kies je op kleur, niet op een naam in een keuzelijst: elke kaart heeft
+  dezelfde stalenrij, en de afvalkaart heeft er één per fractie. Naast het palet zit
+  een eigen kleur — een hexwaarde, of `var(--primary-color)` om je HA-thema te
+  volgen. Die laatste is de nuttigste: één themakleur op zes kaarten is één
+  beslissing, zes keer `#198fd9` invullen is zes beslissingen.
 - **Afval** sorteert zelf op datum en kiest de bakkleur op de naam van de sensor.
   Datums worden met een eigen parser gelezen: `18-08-2026` leest JavaScript als een
   Amerikaanse maand-dag, wat stil de verkeerde dag geeft of `NaN`.

@@ -38,6 +38,7 @@ import {
   isDead,
   isOn,
   isStateless,
+  lightTone,
   localizeState,
   nameOf,
   pictureOf,
@@ -143,18 +144,17 @@ class ButtonCard extends DacCard {
   /**
    * De kleur die deze knop nu draagt.
    *
-   * Een lamp draagt de kleur die hij maakt -- daar hangt hij tenslotte voor. Een
-   * lichtgroep zonder eigen kleur, en alles wat geen lamp is, krijgt het accent.
+   * Eén lamp draagt de kleur die hij maakt -- daar hangt hij tenslotte voor. Een
+   * groep niet: die leent zijn kleur van het lid dat toevallig aan staat, en dan
+   * wordt een kamer met vier witte spots paars omdat er één ledstrip in hangt.
+   * Groepen krijgen dus de vaste lichtkleur; alles wat geen lamp is, het accent.
+   * Zie `lightTone` in ha.js.
    */
   tone_() {
     const c = this.config;
     if (c.tone) return toneValue(c.tone);
     if (domainOf(c.entity) !== "light") return TONES.accent;
-
-    const st = stateOf(this.hass, c.entity);
-    const rgb = st?.state === "on" ? st.attributes?.rgb_color : null;
-    if (rgb) return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    return TONES.lit;
+    return lightTone(stateOf(this.hass, c.entity)) ?? TONES.lit;
   }
 
   template() {

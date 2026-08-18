@@ -17,8 +17,8 @@
  * reads as the green bin without spending the colour that means "in orde".
  */
 
-import { DacCard, registerCard, registerEditor, rowsFor, toneValue, TONE_LABELS, TONES, INCOMPLETE } from "../base.js";
-import { DacEditor, sel, row, section } from "../editor/base.js";
+import { DacCard, registerCard, registerEditor, rowsFor, toneValue, INCOMPLETE } from "../base.js";
+import { DacEditor } from "../editor/base.js";
 import { resolve } from "../icons.js";
 import { dayCount, daysBetween, nameOf, parseDate, relativeDay, shortDate, stateOf } from "../ha.js";
 
@@ -267,7 +267,9 @@ class WasteCard extends DacCard {
  * De editor werkt plat, de config houdt de kleuren in een map.
  *
  * `ha-form` kent geen herhalende rij, dus krijgt elke gekozen sensor een eigen
- * keuzelijst `kleur:<entity>`, die `serialize` terugvouwt naar `tones`.
+ * platte sleutel `kleur:<entity>`, die `serialize` terugvouwt naar `tones`. De
+ * kleur zelf kiest hij met onze eigen stalenrij en niet met een keuzelijst: een
+ * kleur kies je op kleur, niet op de naam "Groenblauw".
  */
 class WasteEditor extends DacEditor {
   defaults() {
@@ -294,28 +296,36 @@ class WasteEditor extends DacEditor {
     return out;
   }
 
-  schema() {
-    const ids = this.config_?.sensors ?? [];
-    const options = Object.keys(TONES).map((value) => ({
-      value,
-      label: TONE_LABELS[value] ?? value,
-    }));
-    return [
-      { name: "sensors", selector: { entity: { domain: "sensor", multiple: true } } },
-      ...ids
-        .map((s) => (typeof s === "string" ? s : s.entity))
-        .filter(Boolean)
-        .map((id) => ({ name: `kleur:${id}`, selector: sel.select(options) })),
+  /** De sensoren van deze kaart, in de vorm waarin je ze kunt aanwijzen. */
+  ids_() {
+    return (this.config_?.sensors ?? [])
+      .map((s) => (typeof s === "string" ? s : s.entity))
+      .filter(Boolean);
+  }
 
-    ];
+  /**
+   * De kleur per fractie is een rij stalen, niet een keuzelijst.
+   *
+   * Er stonden namen in een dropdown -- "Oranje", "Groenblauw" -- en dan zit je
+   * te gokken welke van de twee blauwen je bedoelt en wat de bak straks wordt.
+   * Een kleur kies je op kleur. Ze staan ná het formulier, want je kunt pas een
+   * kleur per sensor kiezen als je de sensoren hebt aangewezen.
+   */
+  pickers() {
+    return this.ids_().map((id) => ({
+      key: `kleur:${id}`,
+      kind: "tone",
+      label: `Kleur voor ${cleanLabel(this.hass?.states?.[id]?.attributes?.friendly_name ?? id) || id}`,
+      compact: true,
+      after: true,
+    }));
+  }
+
+  schema() {
+    return [{ name: "sensors", selector: { entity: { domain: "sensor", multiple: true } } }];
   }
 
   label(s) {
-    if (s.name.startsWith("kleur:")) {
-      const id = s.name.slice(6);
-      const fn = this.hass?.states?.[id]?.attributes?.friendly_name ?? id;
-      return `Kleur voor ${cleanLabel(fn) || fn}`;
-    }
     return (
       {
         sensors: "Afvalsensoren",
